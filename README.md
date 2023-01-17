@@ -8,6 +8,6 @@ The tutorial covers model specification, diagnostics, validation, inference and 
 
 [Tutorial](https://Benjamin-Halliwell.github.io/MR-PMM/MR-PMM_tutorial.html)
 
-Further discussion and examples of model validation techniques in the context of MR-PMM is given below.
+Additional demonstrations of model diagnostics and validation techniques in the context of MR-PMM are given below.
 
 [Model validation](https://Benjamin-Halliwell.github.io/MR-PMM/modelValidation/PMM_validation_md.html)
