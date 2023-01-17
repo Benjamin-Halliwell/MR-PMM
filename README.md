@@ -1,4 +1,4 @@
-# MR-PMM
+# Multi-Response Phylogentic Mixed Models
 
 This repository pertains to the article "Multi-Response Phylogenetic Mixed Models: Concepts and Application" by Ben Halliwell, Luke A. Yates and Barbara R. Holland
 
