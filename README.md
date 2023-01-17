@@ -2,7 +2,8 @@
 
 This repository pertains to the article
 
-"Multi-Response Phylogenetic Mixed Models: Concepts and Application" by Ben Halliwell, Luke A. Yates and Barbara R. Holland
+"Multi-Response Phylogenetic Mixed Models: Concepts and Application"
+        Ben Halliwell, Luke A. Yates and Barbara R. Holland
 
 https://www.biorxiv.org/content/10.1101/2022.12.13.520338v1
 
