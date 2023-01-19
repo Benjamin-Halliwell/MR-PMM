@@ -104,7 +104,9 @@ In contrast, the identity matrix $I$ (an $n\times n$ matrix with 1 in all diagon
 \mathbf{e} &\sim& \mbox{MVN}(0, \sigma^2_{e}I)\\
 \end{eqnarray}\
 
-## Example
+\
+
+$\mathbf{EXAMPLE}$
 
 Consider the following 5-taxon phylogeny with similarity between taxa shown on the x axis:
 
@@ -330,7 +332,7 @@ b.1 %>% pp_check(ndraws = 100)
 
 ```
 
-For MCMCglmm, posterior predictive checks can be obtained with slightly more effort (see MCMCglmm course notes)
+For MCMCglmm, posterior predictive checks are also obtained fairly easily (see MCMCglmm course notes)
 
 ```{r, eval = F}
 
@@ -863,8 +865,8 @@ where $V$ is the level of residual variance (additive over-dispersion) fixed in 
 
 # BRMS
 b.3 %>% as_tibble() %>% 
-        dplyr::select(Sigma_phy_22 = sd_animal__y2_Intercept^2) %>% 
-        mutate(ICC_y2 = Sigma_phy_22/(Sigma_phy_22 + 1 + pi^2/3)) %>% 
+        dplyr::select(Sigma_phy_22 = sd_animal__y2_Intercept) %>% 
+        mutate(ICC_y2 = Sigma_phy_22^2/(Sigma_phy_22 + 1 + pi^2/3)) %>% 
         pull(ICC_y2) %>% quantile(probs=c(0.025,0.5,0.975))
 
 ```

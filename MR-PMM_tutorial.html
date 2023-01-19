@@ -1620,9 +1620,9 @@ errors:</p>
 \mathbf{e} &amp;\sim&amp; \mbox{MVN}(0, \sigma^2_{e}I)\\
 \end{eqnarray}\]</span><br />
 </p>
-</div>
-<div id="example" class="section level2">
-<h2>Example</h2>
+<p><br />
+</p>
+<p><span class="math inline">\(\mathbf{EXAMPLE}\)</span></p>
 <p>Consider the following 5-taxon phylogeny with similarity between taxa
 shown on the x axis:</p>
 <pre class="r"><code>toy.phy &lt;- read.tree(text=&#39;((5:3, (4:2, 3:2):1):1, (2:1, 1:1):3);&#39;)
@@ -1864,8 +1864,8 @@ p. 158). It is very straightforward to run posterior predictive checks
 in brms.</p>
 <pre class="r"><code># posterior predictive checks
 b.1 %&gt;% pp_check(ndraws = 100)</code></pre>
-<p>For MCMCglmm, posterior predictive checks can be obtained with
-slightly more effort (see MCMCglmm course notes)</p>
+<p>For MCMCglmm, posterior predictive checks are also obtained fairly
+easily (see MCMCglmm course notes)</p>
 <pre class="r"><code># posterior predictive checks
 rep &lt;- 100
 pred &lt;- matrix(nrow = rep, ncol = 250)
@@ -2252,15 +2252,17 @@ m.2 &lt;- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 nitt=210000, burnin=10000, thin=200,
                 pr = TRUE, verbose = FALSE)
 
-## BRMS
-#p.b.2 &lt;- set_prior(&quot;student_t(3, 0, 2.5)&quot;, class = c(&quot;sd&quot;,&quot;sigma&quot;,&quot;Intercept&quot;), lb = c(0,0,NA))
+## brms
+p.b.2 &lt;- set_prior(prior = rep(c(&quot;student_t(3, 0, 2.5)&quot;,&quot;student_t(3, 0, 2.5)&quot;, &quot;student_t(3, 0.9, 2.5)&quot;),2),
+                   class = rep(c(&quot;sd&quot;,&quot;sigma&quot;,&quot;Intercept&quot;),2), 
+                   lb = rep(c(0,0,NA)), resp = rep(c(&quot;y1&quot;,&quot;y2&quot;), each = 3))
 b.2.bf &lt;- brmsformula(mvbind(y1, y2) ~ (1|b|gr(animal, cov = C))) + set_rescor(TRUE)
 b.2 &lt;- brm(b.2.bf,
            data = d2,
-           #prior = p.b.2,
+           prior = p.b.2,
            family = gaussian(), 
            data2 = list(C = C),
-           cores = 2, chains = 2, iter = 3000, thin = 3)</code></pre>
+           cores = 2, chains = 2, iter = 300, thin = 3)</code></pre>
 <p><br />
 </p>
 </div>
@@ -2315,29 +2317,28 @@ summary(b.2)
 
 ## MCMCglmm
 # phylogenetic correlation between y1 and y2
-mean(m.2$VCV[,&quot;traity1:traity2.animal&quot;]/
+quantile(m.2$VCV[,&quot;traity1:traity2.animal&quot;]/
      sqrt(m.2$VCV[,&quot;traity1:traity1.animal&quot;]*m.2$VCV[,&quot;traity2:traity2.animal&quot;]))
 # independent correlation between y1 and y2
-mean(m.2$VCV[,&quot;traity1:traity2.units&quot;]/
+quantile(m.2$VCV[,&quot;traity1:traity2.units&quot;]/
      sqrt(m.2$VCV[,&quot;traity1:traity1.units&quot;]*m.2$VCV[,&quot;traity2:traity2.units&quot;]))</code></pre>
 <p><br />
 </p>
 </div>
 <div id="phylogenetic-signal-1" class="section level3">
 <h3>Phylogenetic Signal</h3>
-<p>Similarly, phylogenetic signal is calculated for each trait by
-substituting elements of the parameterized (co)variance matrices <span class="math inline">\(\Sigma^{\mathrm{phy}}\)</span> and <span class="math inline">\(\Sigma^{\mathrm{ind}}\)</span> into the
+<p>Phylogenetic signal is calculated for each trait by substituting
+elements of the parameterized (co)variance matrices <span class="math inline">\(\Sigma^{\mathrm{phy}}\)</span> and <span class="math inline">\(\Sigma^{\mathrm{ind}}\)</span> into the
 calculation of <span class="math inline">\(h^2\)</span>, e.g., for <span class="math inline">\(y1\)</span>:</p>
 <pre class="r"><code># MCMCglmm
-(m.2$VCV[,&quot;traity1:traity1.animal&quot;]/
-(m.2$VCV[,&quot;traity1:traity1.animal&quot;]+m.2$VCV[,&quot;traity1:traity1.units&quot;])) %&gt;%
-  quantile(probs=c(0.025,0.5,0.975))
+quantile(m.2$VCV[,&quot;traity1:traity1.animal&quot;]/
+(m.2$VCV[,&quot;traity1:traity1.animal&quot;]+m.2$VCV[,&quot;traity1:traity1.units&quot;]))
 
 # brms
 b.2 %&gt;% as_tibble() %&gt;% 
         dplyr::select(sigma_b_y1 = sd_animal__y1_Intercept, sigma_e_y1 = sigma_y1) %&gt;% 
         mutate(h2_y1 = sigma_b_y1^2/(sigma_b_y1^2 + sigma_e_y1^2)) %&gt;% 
-        pull(h2_y1) %&gt;% quantile(probs=c(0.025,0.5,0.975))</code></pre>
+        pull(h2_y1) %&gt;% quantile(probs=c(0,0.25,0.5,0.75,1))</code></pre>
 <p><br />
 </p>
 </div>
@@ -2423,7 +2424,7 @@ have just constrained the Gaussian error term to be small
 demanding) solution is to edit the underlying stan code to prevent
 estimation of the redundant Gaussian error term.</p>
 <pre class="r"><code># MCMCglmm
-p3 &lt;- list(G = list(G1 = list(V = diag(2), nu = 2, alpha.mu = rep(0,2), alpha.V = diag(2))), # parameter expanded prior
+p3 &lt;- list(G = list(G1 = list(V = diag(2), nu = 2, alpha.mu = rep(0,2), alpha.V = diag(2))), # parameter expanded prior for random effects of threshold response
            R = list(R1 = list(V = diag(2), nu = 2, fix = 2)))
 m.3 &lt;- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 random = ~us(trait):animal,
@@ -2435,16 +2436,21 @@ m.3 &lt;- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 nitt=210000, burnin=10000, thin=200,
                 pr=TRUE,verbose = FALSE)
 
-# BRMS
-bf_y1 &lt;- bf(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
-bf_y2 &lt;- bf(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
-# p.b.3 &lt;- set_prior(&quot;student_t(3, 0, 2.5)&quot;, class = c(&quot;sd&quot;,&quot;sigma&quot;,&quot;Intercept&quot;), lb = c(0,0,NA))
+# brms
+bf_y1 &lt;- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
+bf_y2 &lt;- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
+
+
+p.b.3 &lt;- set_prior(prior = c(rep(&quot;student_t(3, 0, 2.5)&quot;,2), &quot;student_t(3, 0.9, 2.5)&quot;,
+                             rep(&quot;student_t(3, 0, 2.5)&quot;,3)),
+                   class = rep(c(&quot;sd&quot;,&quot;sigma&quot;,&quot;Intercept&quot;),2), 
+                   lb = rep(c(0,0,NA)), resp = rep(c(&quot;y1&quot;,&quot;y2&quot;), each = 3))
 b.3 &lt;- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
           data = d3, 
           family = gaussian(), 
           data2 = list(C = C),
-          #prior = p.b.3,
-          cores = 4, chains = 4, iter = 2000, thin = 1
+          prior = p.b.3,
+          cores = 2, chains = 2, iter = 3000, thin = 3
 )</code></pre>
 <p><br />
 </p>
@@ -2481,8 +2487,8 @@ Schielzeth 2013</a> for details)</span>.</p>
 
 # BRMS
 b.3 %&gt;% as_tibble() %&gt;% 
-        dplyr::select(Sigma_phy_22 = sd_animal__y2_Intercept^2) %&gt;% 
-        mutate(ICC_y2 = Sigma_phy_22/(Sigma_phy_22 + 1 + pi^2/3)) %&gt;% 
+        dplyr::select(Sigma_phy_22 = sd_animal__y2_Intercept) %&gt;% 
+        mutate(ICC_y2 = Sigma_phy_22^2/(Sigma_phy_22 + 1 + pi^2/3)) %&gt;% 
         pull(ICC_y2) %&gt;% quantile(probs=c(0.025,0.5,0.975))</code></pre>
 <p><br />
 </p>
@@ -2595,45 +2601,33 @@ get_coverage &lt;- function(data) data %&gt;%
 
 # prediction conditional on species-level random-intercept estimates
 # N.B. worth fitting skew normal for SLA?
-ppA1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: logSLA&quot;)
-ppA2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: N&quot;)
-ppA3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: d13C&quot;)
+ppC1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: logSLA&quot;)
+ppC2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: N&quot;)
+ppC3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: d13C&quot;)
 
-ggarrange(ppA1, ppA2, ppA3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
+ggarrange(ppC1, ppC2, ppC3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
   annotate_figure(top = &quot;PP-check: conditional on species-level random-intercept estimates&quot;)
 
-get_coverage(ppA1$data);get_coverage(ppA2$data);get_coverage(ppA3$data)
+get_coverage(ppC1$data);get_coverage(ppC2$data);get_coverage(ppC3$data)
 
-# fixed effects only (i.e., ignore random effects by setting them to zero)
-ppB1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;, re_formula = NA) + 
-                labs(subtitle = &quot;Response: logSLA&quot;)
-ppB2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;, re_formula = NA) + 
-                labs(subtitle = &quot;Response: N&quot;)
-ppB3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;, re_formula = NA) + 
-                labs(subtitle = &quot;Response: d13C&quot;)
-
-ggarrange(ppB1, ppB2, ppB3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
-  annotate_figure(top = &quot;PP-check: fixed effects only (i.e., ignore random effects by setting them to zero)&quot;)
-
-get_coverage(ppB1$data);get_coverage(ppB2$data);get_coverage(ppB3$data)
 
 # prediction marginalised over Gaussian distribution of random effects
-pp1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;, 
+ppM1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;, 
                 allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;,
                 newdata = fit$data %&gt;% mutate(animal = NA)) + labs(subtitle = &quot;Response: logSLA&quot;)
 
-pp2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;, 
+ppM2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;, 
                 allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;,
                 newdata = fit$data %&gt;% mutate(animal = NA)) + labs(subtitle = &quot;Response: N&quot;)
 
-pp3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;, 
+ppM3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;, 
                 allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;, 
                 newdata = fit$data %&gt;% mutate(animal = NA)) + labs(subtitle = &quot;Response: d13C&quot;)
 
-ggarrange(pp1,pp2,pp3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
+ggarrange(ppM1,ppM2,ppM3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
   annotate_figure(top = &quot;PP-check: marginalised over Gaussian distribution of random effects&quot;)
 
-get_coverage(pp1$data);get_coverage(pp2$data);get_coverage(pp3$data)
+get_coverage(ppM1$data);get_coverage(ppM2$data);get_coverage(ppM3$data)
 
 #----------------
 # loo predictions
