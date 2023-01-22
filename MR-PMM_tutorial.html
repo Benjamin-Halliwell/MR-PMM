@@ -2513,10 +2513,10 @@ this analysis were to evaluate evidence for: 1) phylogenetic signal in
 each trait; and 2) correlations between traits on the phylogenetic and
 independent level.</p>
 <p>We derived the phylogenetic correlation matrix <span class="math inline">\(C\)</span> from the maximum likelihood Eucalypt
-phylogeny presented in <span class="citation">(<a href="#ref-thornhill2019dated" role="doc-biblioref"><strong>thornhill2019dated?</strong></a>)</span>,
-pruning the tree to include only those species for which data was
-available for the three target leaf traits: specific leaf area (SLA);
-nitrogen content per dry mass of leaf tissue (<span class="math inline">\(\mathbf{N}\)</span>); and the ratio of carbon
+phylogeny presented in <span class="citation">(<a href="#ref-thornhill2019dated" role="doc-biblioref">Thornhill et al.
+2019</a>)</span>, pruning the tree to include only those species for
+which data was available for the three target leaf traits: specific leaf
+area (SLA); nitrogen content per dry mass of leaf tissue (<span class="math inline">\(\mathbf{N}\)</span>); and the ratio of carbon
 isotopes 12 and 13 in leaf tissue (<span class="math inline">\(\delta{13}{}{\mathbf{C}}\)</span>). We chose to
 prune the tree to complete cases for simplicity, acknowledging work that
 suggests phylogenetic imputation may be a preferable approach to missing
@@ -2750,24 +2750,25 @@ ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$log_SLA, cov1, &quot;logSLA&qu
 </div>
 <div id="notes" class="section level2">
 <h2>Notes</h2>
-<p>By using the consensus tree from <span class="citation">(<a href="#ref-thornhill2019dated" role="doc-biblioref"><strong>thornhill2019dated?</strong></a>)</span> to
-compute <span class="math inline">\(C\)</span>, we assume this phylogeny
-is known without error. In reality, phylogenies are inferred from
-sequence data with uncertainty, and thus represent mere hypotheses of
-the evolutionary relationships between taxa. Where-ever possible, it is
-preferable to propagate this uncertainty into our models. In a fully
-Bayesian setting, integrating over phylogenetic uncertainty is achieved
-by fitting models to a posterior sample of trees, e.g. with a function
-such as <code>brms_multiple</code>. When sequence data are available, an
-even more integrative approach is to infer phylogenies jointly with the
-estimation of trait correlations in the likelihood function (e.g. Cybis
-et al. 2016). We did not have access to a full posterior distribution of
-trees, though Thornhill et al. (2019) do present three alternative
-consensus trees; two inferred by ML and a third representing a consensus
-tree from a Bayesian analysis. Therefore, as an informal approach to
-test how sensitive results were to phylogenetic uncertainty, we fit the
-model to each tree separately and confirmed that each fit produced
-qualitatively equivalent parameter estimates (results not shown).</p>
+<p>By using the consensus tree from <span class="citation">(<a href="#ref-thornhill2019dated" role="doc-biblioref">Thornhill et al.
+2019</a>)</span> to compute <span class="math inline">\(C\)</span>, we
+assume this phylogeny is known without error. In reality, phylogenies
+are inferred from sequence data with uncertainty, and thus represent
+mere hypotheses of the evolutionary relationships between taxa.
+Where-ever possible, it is preferable to propagate this uncertainty into
+our models. In a fully Bayesian setting, integrating over phylogenetic
+uncertainty is achieved by fitting models to a posterior sample of
+trees, e.g. with a function such as <code>brms_multiple</code>. When
+sequence data are available, an even more integrative approach is to
+infer phylogenies jointly with the estimation of trait correlations in
+the likelihood function (e.g. Cybis et al. 2016). We did not have access
+to a full posterior distribution of trees, though Thornhill et
+al. (2019) do present three alternative consensus trees; two inferred by
+ML and a third representing a consensus tree from a Bayesian analysis.
+Therefore, as an informal approach to test how sensitive results were to
+phylogenetic uncertainty, we fit the model to each tree separately and
+confirmed that each fit produced qualitatively equivalent parameter
+estimates (results not shown).</p>
 <p>For discussion of the results of this analysis, see the manuscript at
 <a href="https://doi.org/10.1101/2022.12.13.520338" class="uri">https://doi.org/10.1101/2022.12.13.520338</a>.</p>
 <p><br />
@@ -2822,6 +2823,13 @@ Gurutzeta Guillera-Arroita, Severin Hauenstein, et al. 2017.
 <span>“Cross-Validation Strategies for Data with Temporal, Spatial,
 Hierarchical, or Phylogenetic Structure.”</span> <em>Ecography</em> 40
 (8): 913–29.
+</div>
+<div id="ref-thornhill2019dated" class="csl-entry">
+Thornhill, Andrew H, Michael D Crisp, Carsten Külheim, Kristy E Lam,
+Leigh A Nelson, David K Yeates, and Joseph T Miller. 2019. <span>“A
+Dated Molecular Perspective of Eucalypt Taxonomy, Evolution and
+Diversification.”</span> <em>Australian Systematic Botany</em> 32 (1):
+29–48.
 </div>
 <div id="ref-de2018quantitative" class="csl-entry">
 Villemereuil, Pierre de. 2018. <span>“Quantitative Genetic Methods
