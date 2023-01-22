@@ -1864,8 +1864,13 @@ p. 158). It is very straightforward to run posterior predictive checks
 in brms.</p>
 <pre class="r"><code># posterior predictive checks
 b.1 %&gt;% pp_check(ndraws = 100)</code></pre>
+<<<<<<< HEAD
 <p>For MCMCglmm, posterior predictive checks are also obtained fairly
 easily (see MCMCglmm course notes)</p>
+=======
+<p>For MCMCglmm, posterior predictive checks can be obtained with
+slightly more effort (see MCMCglmm course notes)</p>
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 <pre class="r"><code># posterior predictive checks
 rep &lt;- 100
 pred &lt;- matrix(nrow = rep, ncol = 250)
@@ -2252,17 +2257,26 @@ m.2 &lt;- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 nitt=210000, burnin=10000, thin=200,
                 pr = TRUE, verbose = FALSE)
 
+<<<<<<< HEAD
 ## brms
 p.b.2 &lt;- set_prior(prior = rep(c(&quot;student_t(3, 0, 2.5)&quot;,&quot;student_t(3, 0, 2.5)&quot;, &quot;student_t(3, 0.9, 2.5)&quot;),2),
                    class = rep(c(&quot;sd&quot;,&quot;sigma&quot;,&quot;Intercept&quot;),2), 
                    lb = rep(c(0,0,NA)), resp = rep(c(&quot;y1&quot;,&quot;y2&quot;), each = 3))
+=======
+## BRMS
+#p.b.2 &lt;- set_prior(&quot;student_t(3, 0, 2.5)&quot;, class = c(&quot;sd&quot;,&quot;sigma&quot;,&quot;Intercept&quot;), lb = c(0,0,NA))
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 b.2.bf &lt;- brmsformula(mvbind(y1, y2) ~ (1|b|gr(animal, cov = C))) + set_rescor(TRUE)
 b.2 &lt;- brm(b.2.bf,
            data = d2,
            prior = p.b.2,
            family = gaussian(), 
            data2 = list(C = C),
+<<<<<<< HEAD
            cores = 2, chains = 2, iter = 300, thin = 3)</code></pre>
+=======
+           cores = 2, chains = 2, iter = 3000, thin = 3)</code></pre>
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 <p><br />
 </p>
 </div>
@@ -2601,6 +2615,7 @@ get_coverage &lt;- function(data) data %&gt;%
 
 # prediction conditional on species-level random-intercept estimates
 # N.B. worth fitting skew normal for SLA?
+<<<<<<< HEAD
 ppC1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: logSLA&quot;)
 ppC2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: N&quot;)
 ppC3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: d13C&quot;)
@@ -2628,6 +2643,47 @@ ggarrange(ppM1,ppM2,ppM3, nrow = 3, legend = &quot;none&quot;) %&gt;%
   annotate_figure(top = &quot;PP-check: marginalised over Gaussian distribution of random effects&quot;)
 
 get_coverage(ppM1$data);get_coverage(ppM2$data);get_coverage(ppM3$data)
+=======
+ppA1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: logSLA&quot;)
+ppA2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: N&quot;)
+ppA3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: d13C&quot;)
+
+ggarrange(ppA1, ppA2, ppA3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
+  annotate_figure(top = &quot;PP-check: conditional on species-level random-intercept estimates&quot;)
+
+get_coverage(ppA1$data);get_coverage(ppA2$data);get_coverage(ppA3$data)
+
+# fixed effects only (i.e., ignore random effects by setting them to zero)
+ppB1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;, re_formula = NA) + 
+                labs(subtitle = &quot;Response: logSLA&quot;)
+ppB2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;, re_formula = NA) + 
+                labs(subtitle = &quot;Response: N&quot;)
+ppB3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;, re_formula = NA) + 
+                labs(subtitle = &quot;Response: d13C&quot;)
+
+ggarrange(ppB1, ppB2, ppB3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
+  annotate_figure(top = &quot;PP-check: fixed effects only (i.e., ignore random effects by setting them to zero)&quot;)
+
+get_coverage(ppB1$data);get_coverage(ppB2$data);get_coverage(ppB3$data)
+
+# prediction marginalised over Gaussian distribution of random effects
+pp1 &lt;- pp_check(fit, resp= &quot;logSLA&quot;, type = &quot;intervals&quot;, 
+                allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;,
+                newdata = fit$data %&gt;% mutate(animal = NA)) + labs(subtitle = &quot;Response: logSLA&quot;)
+
+pp2 &lt;- pp_check(fit, resp= &quot;N&quot;, type = &quot;intervals&quot;, 
+                allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;,
+                newdata = fit$data %&gt;% mutate(animal = NA)) + labs(subtitle = &quot;Response: N&quot;)
+
+pp3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;, 
+                allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;, 
+                newdata = fit$data %&gt;% mutate(animal = NA)) + labs(subtitle = &quot;Response: d13C&quot;)
+
+ggarrange(pp1,pp2,pp3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
+  annotate_figure(top = &quot;PP-check: marginalised over Gaussian distribution of random effects&quot;)
+
+get_coverage(pp1$data);get_coverage(pp2$data);get_coverage(pp3$data)
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 #----------------
 # loo predictions
