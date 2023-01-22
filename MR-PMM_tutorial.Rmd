@@ -3,7 +3,7 @@ title: "Multi-Response Phylogenetic Mixed Models"
 author: "Ben Halliwell & Luke Yates"
 header-includes:
   - \usepackage{mathtools}
-date: "14/12/2022"
+date: "2023"
 bibliography: bib_MR-PMM.bib
 link-citations: true
 output: 
@@ -18,18 +18,19 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(tidyverse); library(ggplot2);library(knitr); library(brms);library(MCMCglmm);library(bayesplot)
-library(rstan);library(geiger);library(ape);library(ape);library(caper); library(parallel);library(coda);library(dplyr)
+library(rstan);library(brms)
+library(tidyverse);library(ggplot2);library(knitr);library(MCMCglmm);library(bayesplot)
+library(geiger);library(ape);library(caper);library(parallel);library(coda);library(dplyr)
 knitr::opts_chunk$set(echo = TRUE, dev="png", dpi=96)
 ```
 
 This tutorial is associated with the article "Multi-Response Phylogenetic Mixed Models: Concepts and Application"
 
-EcoEvoRxiv preprint DOI XXXXXXX
+EcoEvoRxiv preprint https://doi.org/10.1101/2022.12.13.520338
 
 by
 
-Ben Halliwell, Luke Yates & Barbara Holland   
+Ben Halliwell, Luke A. Yates & Barbara R. Holland
 
 \
 
@@ -39,7 +40,7 @@ Ben Halliwell, Luke Yates & Barbara Holland
 
 In this tutorial we will cover how to implement multi-response (MR) phylogenetic mixed models (PMM) in two popular R packages, MCMCglmm and brms. While frequentist implementations of the PMM are available (e.g., pglmm() in the "phyr" package), we advocate for a Bayesian approach due to 1) greater flexibility in fitting non-Gaussian response traits 2) suitability for estimating variance components associated with structured random effects; 3) the ability to sample conditional multivariate distributions, avoiding intractable integration problems faced by frequentist techniques.
 
-Throughout this tutorial, we explore a low dimensional example (tree with only 5 taxa) in order to show full workings of the matrix manipulations that underlie the models specified. This is for the sake of exposition only; analyses of the form presented will typically require much higher phylogenetic replication to produce reliable estimates of, for example, phylogenetic correlations [@housworth2004phylogenetic]. Thus, while the mathematical workings presented follow a 5 taxa example, model outputs are based on analyses from simulations including 250 taxa.
+Throughout this tutorial, we explore a low dimensional example (tree with only 5 taxa) in order to show full workings of the matrix manipulations that underlie the covariance structures specified. This is for the sake of exposition only; analyses of the form presented will typically require much higher sample sizes to produce reliable estimates of, for example, phylogenetic correlations [@housworth2004phylogenetic]. Thus, while the mathematical workings presented follow a 5 taxa example, model outputs are based on analyses of data simulated for 250 taxa.
 
 \
 
@@ -63,13 +64,14 @@ where $\mu$ represents,
 
 \
 
+```{=tex}
 \begin{eqnarray}
 \boldsymbol{\mu}  = \beta_0 + \beta_1\boldsymbol{X_1} + \ldots + \beta_{k}\boldsymbol{X_{k}}
 \end{eqnarray}
-
+```
 \
 
-In order to capture the expected influence of co-ancestry on $y$, (similar values among closely related taxa), the distribution of our random effect, $b$, is multivariate normal, with mean 0 and (co)variance given by $\sigma_{b}C$, 
+In order to capture the expected influence of co-ancestry on $y$, (similar values among closely related taxa), the distribution of our random effect, $b$, is multivariate normal, with mean 0 and (co)variance given by $\sigma_{b}C$,
 
 \
 
@@ -78,6 +80,7 @@ In order to capture the expected influence of co-ancestry on $y$, (similar value
 \end{eqnarray}\
 
 <!-- The phylogenetic variance (e.g., Brownian rate), $\sigma_{b}$, is a scalar to be estimated by the model and $A$ is a fixed $n\times n$ -->
+
 <!-- phylogenetic VCV matrix, where $n$ is the number of taxa in the tree. This model therefore takes as input a phylogenetic tree (topology and branch lengths), which is assumed to be known without error. The $A$ matrix itself is derived by taking the inverse of the distance matrix of the tree. It gives the expected (co)variance among taxa in the value of $y$ assuming some model of evolution (e.g. BM) along the branches of that tree. -->
 
 Here, $C$ is a fixed $n\times n$ phylogenetic VCV matrix, where $n$ is the number of taxa in the tree, and $\sigma_{b}$, the phylogenetic variance, is a scalar to be estimated by the model. This model therefore takes as input a phylogeny (topology and branch lengths), which is assumed to be known without error. The $C$ matrix is derived from the similarity matrix of the phylogeny. This gives the expected (co)variance among taxa in $y$ assuming BM evolution.
@@ -93,7 +96,6 @@ C &=&
 \end{pmatrix}
 \end{eqnarray}\
 
-
 In contrast, the identity matrix $I$ (an $n\times n$ matrix with 1 in all diagonal elements and 0 in all off-diagonal elements) encodes independent residual error associated with each observation (taxon) in the distributional statement for the errors:
 
 \
@@ -102,14 +104,10 @@ In contrast, the identity matrix $I$ (an $n\times n$ matrix with 1 in all diagon
 \mathbf{e} &\sim& \mbox{MVN}(0, \sigma^2_{e}I)\\
 \end{eqnarray}\
 
-<<<<<<< HEAD
 \
 
 $\mathbf{EXAMPLE}$
 
-=======
-## Example
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 Consider the following 5-taxon phylogeny with similarity between taxa shown on the x axis:
 
 ```{r, fig.width=5, fig.align='center'}
@@ -142,7 +140,6 @@ C &=&
                 
 \end{eqnarray}\
 
-
 In order to facilitate comparison between phylogenetic and independent contributions when partitioning the variance, $C$ is often standardised to the unit diagonal (i.e., re-scaled to a correlation matrix) prior to analyses, such that,
 
 \
@@ -156,8 +153,6 @@ C_{cor} &=&
                 0 & 0 & 0.25 & 0.5 & 1 \\
                 \end{pmatrix}
 \end{eqnarray}\
-
-
 
 The identity matrix $I$ for this model is:
 
@@ -175,10 +170,7 @@ I &=&
 
 ## Data Simulation
 
-Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data.
-To simulate data under this model, we simply construct our variable, $y$, from the linear combination of predictors specified by
-the model, by supplying vectors of length $n$ for each of the quantities $\mu$, $b$, and $e$. For Gaussian variables
-this can be done directly. For non-Gaussian variables simulation is a two-step process where $b$ and $e$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\mu$ = $\beta_0$).
+Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data. To simulate data under this model, we simply construct our variable, $y$, from the linear combination of predictors specified by the model, by supplying vectors of length $n$ for each of the quantities $\mu$, $b$, and $e$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $b$ and $e$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\mu$ = $\beta_0$).
 
 \
 
@@ -261,11 +253,11 @@ b.1 <- brm(y ~ 1 + (1|gr(animal, cov = C)),
 
 ## Model Syntax
 
-The code above fits the same model in MCMCglmm and brms. In MCMCglmm, `animal` is a reserved term used to identify individuals/taxa in a quantitative genetic/phylogenetic analysis. The random effect specification `~animal` instructs MCMCglmm to fit a random effect at the individual/taxon level with covariance structure supplied via the `pedigree` argument. For `pedigree`, MCMCglmm accepts a `phylo` object directly and performs the necessary steps to derive the matrix $C$ under the hood. The remaining arguments specify the data, the priors, and the sampler settings. The argument `pr` is used to retain  the posterior distribution of random effects.
+The code above fits the same model in MCMCglmm and brms. In MCMCglmm, `animal` is a reserved term used to identify individuals/taxa in a quantitative genetic/phylogenetic analysis. The random effect specification `~animal` instructs MCMCglmm to fit a random effect at the individual/taxon level with covariance structure supplied via the `pedigree` argument. For `pedigree`, MCMCglmm accepts a `phylo` object directly and performs the necessary steps to derive the matrix $C$ under the hood. The remaining arguments specify the data, the priors, and the sampler settings. The argument `pr` is used to retain the posterior distribution of random effects.
 
 In brms, the phylogenetic random effect can be encoded in the style of lme4 `(1|gr(animal, cov = C))`, where `(1|x)` specifies random intercepts and `gr(animal, cov = C)` encodes the phylogenetic group structure.
 
-It is not necessary to specify a prior to fit this model in either MCMCglmm or brms because sensible defaults are used automatically. However, we choose to explicitly specify (current default) priors to ensure repeatability, should the defaults change in the future. A key difference between these packages is the implemented Monte Carlo sampling method and the subsequent choice of priors. MCMCglmm is based on Gibbs sampling, which requires conjugate prior distributions to reduce sampling time through analytic computations. brms uses Hamiltonian Monte Carlo sampling which is an efficient hybrid of optimisation and sampling approaches that places no restrictions on the choice of prior. 
+It is not necessary to specify a prior to fit this model in either MCMCglmm or brms because sensible defaults are used automatically. However, we choose to explicitly specify (current default) priors to ensure repeatability, should the defaults change in the future. A key difference between these packages is the implemented Monte Carlo sampling method and the subsequent choice of priors. MCMCglmm is based on Gibbs sampling, which requires conjugate prior distributions to reduce sampling time through analytic computations. brms uses Hamiltonian Monte Carlo sampling which is an efficient hybrid of optimisation and sampling approaches that places no restrictions on the choice of prior.
 
 \
 
@@ -282,7 +274,6 @@ plot(b.1)
 
 ```
 
-
 Another standard indicator of sampling adequacy is the effective sample size (ESS) of each parameter estimate. In the presence of auto-correlation between MCMC samples, the ESS will be reduced relative to the thinned sample number, with low ESS indicating poor sampling. ESS is reported in the model summary for both MCMCglmm and brms.
 
 ```{r, eval = F}
@@ -293,9 +284,7 @@ b.1
 
 ```
 
-
 We can also check the auto-correlation in MCMC draws generated by the Gibbs sampler in MCMCglmm. This is generally not necessary for models fit in brms, as the Hamiltonian sampler ensures minimal auto-correlation between samples.
-
 
 ```{r, eval = F}
 
@@ -304,9 +293,7 @@ autocorr(m.1$VCV)
 
 ```
 
-
 For a quantitative assessment of chain convergence, brms reports $\widehat{R}$ statistics, or potential scale reduction factors, by default for each parameter in the model summary, where $\widehat{R}$ $\\<$ 1.05 indicates adequate convergence [@gelman2013BDA]. For MCMCglmm, $\widehat{R}$ can be calculated from multiple MCMC chains of the same model using the `Rhat` function from rstan.
-
 
 ```{r, eval = F}
 
@@ -347,7 +334,6 @@ b.1 %>% pp_check(ndraws = 100)
 
 For MCMCglmm, posterior predictive checks are also obtained fairly easily (see MCMCglmm course notes)
 
-
 ```{r, eval = F}
 
 # posterior predictive checks
@@ -362,20 +348,13 @@ pp_check(obs, pred, ppc_dens_overlay)
 
 ```
 
-
 However, an even more rigorous and sophisticated approach to model validation of MR-PMM is leave-one-out (LOO) cross-validation (CV) (@roberts2017cross; also see section 5 on Prediction in manuscript). Cross validation is the use of data splitting to estimate the predictive performance of one or more statistical models, usually for the purpose of model comparison and selection. However, predictive assessment tools such as cross validation are also useful to quantify or simply visualise how well a model can predict to new data (out of sample performance), e.g., to new taxon-trait pairs in a PMM. This is distinct from the assessment of model adequacy which concerns prediction of data to which a model was fit (within sample performance).
-
 
 \
 
 ## Inference
 
-<<<<<<< HEAD
 Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based upon summary statistics of the posterior distributions of the model parameters. For example, hypothesis tests can be performed by evaluating whether a CI (e.g. 95%) of the posterior of a parameter crosses zero. This is easily evaluated from the model summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify standard deviations, we will re-scale estimates from MCMCglmm by calculating posterior means from the `sqrt` of MCMC samples.
-=======
-Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based upon summary statistics of the posterior distributions of the model parameters. For example, hypothesis tests can be performed by evaluating whether a CI (e.g. 95\%) of the posterior of a parameter crosses zero. This is easily evaluated from the mode, summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify standard deviations, we will re-scale estimates from MCMCglmm by calculating posterior means from the `sqrt` of MCMC samples.
-
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 ```{r, eval = F}
 # summary
@@ -440,10 +419,9 @@ summary(mod)$param["lambda"]
 
 In a multi-response (MR) implementation, response variables are modelled jointly, allowing both phylogenetic and independent (co)variances to be estimated. A MR-PMM with two Gaussian response variables takes the form,
 
-
 \
 
-
+```{=tex}
 \begin{eqnarray}
 \begin{pmatrix}\mathbf{y}_1 \\
 \mathbf{y}_2 \end{pmatrix} &=& 
@@ -451,24 +429,24 @@ In a multi-response (MR) implementation, response variables are modelled jointly
                \boldsymbol{\mu}_2 + \mathbf{b}_2 + \mathbf{e}_2
 \end{pmatrix}\\
 \end{eqnarray}
-
+```
 \
 
 where fixed effects are expressed as a linear combination of predictors,
 
 \
 
+```{=tex}
 \begin{eqnarray}
 \begin{pmatrix}\boldsymbol{\mu}_1 \\ \boldsymbol{\mu}_2 \end{pmatrix} &=& 
 \begin{pmatrix}\beta_{0,1}\mathbf{1} + \beta_{1,1}\boldsymbol{X_{1,1}} + \ldots + \beta_{k,1}\boldsymbol{X_{k,1}} \\
                \beta_{0,2}\mathbf{1} + \beta_{1,2}\boldsymbol{X_{1,2}} + \ldots + \beta_{k,2}\boldsymbol{X_{k,2}}
 \end{pmatrix}\\
 \end{eqnarray}
-
+```
 \
 
-With this design, the phylogenetic random effects must also be realised jointly as a multivariate normal, with variance given by $\Sigma^{\mathrm{phy}} \otimes C$, the Kronecker product of a trait-level correlation matrix $\Sigma^{\mathrm{phy}}$ and the phylogenetic VCV matrix, $C$. With $m$ traits (response variables) and $n$ taxa in the phylogeny, $\Sigma^{\mathrm{phy}} \otimes C$ is an $mn\times mn$ cross-covariance matrix containing phylogenetic (co)variances for all traits as well as between all traits.
-Thus, the phylogenetic random effects and independent residuals are drawn from multivariate normal distributions,
+With this design, the phylogenetic random effects must also be realised jointly as a multivariate normal, with variance given by $\Sigma^{\mathrm{phy}} \otimes C$, the Kronecker product of a trait-level correlation matrix $\Sigma^{\mathrm{phy}}$ and the phylogenetic VCV matrix, $C$. With $m$ traits (response variables) and $n$ taxa in the phylogeny, $\Sigma^{\mathrm{phy}} \otimes C$ is an $mn\times mn$ cross-covariance matrix containing phylogenetic (co)variances for all traits as well as between all traits. Thus, the phylogenetic random effects and independent residuals are drawn from multivariate normal distributions,
 
 \
 
@@ -479,12 +457,7 @@ Thus, the phylogenetic random effects and independent residuals are drawn from m
 \Sigma &=& \Sigma^{\mathrm{phy}} \otimes C + \Sigma^{\mathrm{ind}} \otimes I
 \end{eqnarray}\
 
-<<<<<<< HEAD
 Notice that the two taxon-level variance structures we encountered in the univariate case above ($C$ and $I$) remain, but we must now also consider trait-level covariance operating at both the phylogenetic and independent level. This is achieved via the Kronecker operation $\otimes$ (see matrix expansions below).
-=======
-
-Notice that the two taxon-level variance structures we encountered in the univariate case above ($C$ and $I$) remain, but we must now also consider trait-level covariance operating at both the phylogenetic and independent level. This is achieved via the Kronecker operation. Let's break it down. 
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 $\Sigma^{\mathrm{phy}}$ is an $m\times m$ phylogenetic trait-level VCV matrix where $m$ is the number of response traits in the model,
 
@@ -512,20 +485,20 @@ $\Sigma^{\mathrm{phy}}$ is an $m\times m$ phylogenetic trait-level VCV matrix wh
                 \ldots & 
                 (\sigma^{\mathrm{phy}}_m)^2 \\ \end{pmatrix}\\[2mm]
 
-\end{eqnarray}
-\
+\end{eqnarray}\
 
 such that elements of $\Sigma^{\mathrm{phy}}$ have the general form,
 
 \
 
+```{=tex}
 \begin{eqnarray}
 \Sigma^{\mathrm{{phy}}}_{ij} = \sigma^{\mathrm{{phy}}}_i\sigma^{\mathrm{{phy}}}_j\rho^{\mathrm{{phy}}}_{ij} \\
 \end{eqnarray}
-
+```
 \
 
-where $\rho^{\mathrm{{phy}}}_{ij}$ is the phylogenetic correlation between traits $i$ and $j$  and $\sigma^{\mathrm{{phy}}}_i$ is the standard deviation of the phylogenetic component of variation in trait $i$. Thus, returning to our 5-taxon example, a MR model with two Gaussian response traits (i.e., $m = 2$) will have covariance matrix for the phylogenetic random effects, $\Sigma^{\mathrm{phy}} \otimes C$, of the form:
+where $\rho^{\mathrm{{phy}}}_{ij}$ is the phylogenetic correlation between traits $i$ and $j$ and $\sigma^{\mathrm{{phy}}}_i$ is the standard deviation of the phylogenetic component of variation in trait $i$. Thus, returning to our 5-taxon example, a MR model with two Gaussian response traits (i.e., $m = 2$) will have covariance matrix for the phylogenetic random effects, $\Sigma^{\mathrm{phy}} \otimes C$, of the form:
 
 \
 
@@ -581,7 +554,6 @@ Similarly, the covariance matrix for the independent residual errors, $\Sigma^{\
 
 \
 
-
 <!-- Can't get parenthesis  around smallmatrix. Need \mathtools but how to load?  -->
 
 \begin{eqnarray}
@@ -628,12 +600,7 @@ Similarly, the covariance matrix for the independent residual errors, $\Sigma^{\
 
 \end{eqnarray}\
 
-<<<<<<< HEAD
 **N.B. This example is purely for illustrative purposes. The parameters of this model are not estimable with such low phylogenetic replication (n = 5 taxa).** Low dimensional $A$ and $I$ are used here simply to show the working of matrix manipulations.
-=======
-
-__N.B. This example is purely for illustrative purposes. The parameters of this model are not estimable with such low phylogenetic replication (n = 5 taxa). However, the low dimension of $A$ and $I$ allow us to explicitly show the working of matrix manipulations.__
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 \
 
@@ -651,7 +618,6 @@ m = 2
 # fixed effects (intercepts for each trait)
 u = c(0,0)
 
-<<<<<<< HEAD
 # construct the phylogenetic trait-level covariance matrix, Sigma_phy
 # Sigma_phy is m x m and specifies the phylogenetic variance in each trait (diagonals) as well as the phylogenetic covariance between traits (off-diagonals). To construct Sigma_phy, we first define its (co)variance components:
 sig.b <- c(b11 = 1, b22 = 1) # sqrt of phylo variance for each trait; set to 1 so sigma = sigma^2
@@ -660,17 +626,6 @@ Bcor <- matrix(c(c(1,cor.b.12), c(cor.b.12,1)),m,m, byrow = T) # phylogenetic co
 Sigma_phy <- matrix(kronecker(sig.b, sig.b),m,m)*Bcor # construct Sigma_phy as point-wise product
 
 # N.B. Kronecker used here just for ease of matrix formatting. Do not confuse with Kronecker operation used below for generating the cross-covariance matrices for the random effects (eq. 8 in manuscript), i.e., kronecker(Sigma_phy,C). 
-=======
-# Sigma_phy is the m x m phylogenetic trait-level covariance matrix,
-# i.e., Sigma_phy specifies the phylogenetic variance in each trait (diagonals) as well as the phylogenetic covariance between traits (off-diagonals).
-# To construct Sigma_phy, we first define its (co)variance components.
-sig.b <- c(b11 = 1, b22 = 1) # sqrt of the phylogenetic variances for each trait; set to 1 so sigma = sigma^2
-cor.b.12 = 0.5 # phylogenetic correlation coefficient between traits 1 and 2
-Bcor <- matrix(c(c(1,cor.b.12), c(cor.b.12,1)),m,m, byrow = T) # phylogenetic correlation matrix
-Sigma_phy <- matrix(kronecker(sig.b, sig.b),m,m)*Bcor # Construct Sigma_phy as point-wise product. 
-# N.B. Kronecker used in line above just for ease of matrix formatting. Do not confuse with Kronecker
-# operation used for generating the cross-covariance matrices for the random effects and residuals below
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 # construct the independent trait-level covariance matrix, Sigma_ind
 sig.e <- c(e11 = 1, e22 = 1) # sqrt of independent variance for each trait
@@ -678,15 +633,16 @@ cor.e.12 = 0.5 # independent correlation coefficient
 Ecor <- matrix(c(c(1,cor.e.12),c(cor.e.12,1)),m,m, byrow = T)  # independent correlation matrix
 Sigma_ind <- matrix(kronecker(sig.e, sig.e),m,m)*Ecor # Construct Sigma_ind as point-wise product
 
-# simulate phylogenetic random effects and extract for each trait from the vector, b.
-b = mvrnorm(n = 1, mu = rep(0,n*m), Sigma = kronecker(Sigma_phy,C))
+# simulate phylogenetic random effects
 # n = 1 in order to generate 1 random effect per taxon, mu = rep(0,n*m) centers random effects for all taxa on zero, Sigma = kronecker(Sigma_phy,C) defines the cross-covariance matrix of the random effects. In the kronecker, phylogenetic trait-level covariance is captured by Sigma_phy, taxon-level covariance is captured by C.
+b = mvrnorm(n = 1, mu = rep(0,n*m), Sigma = kronecker(Sigma_phy,C))
+# extract for each trait from the vector, b.
 b1 <- b[1:n] # effects 1:n relate to trait 1
 b2 <- b[(1:n) + n] # effects (1:n)+n relate to trait 2
 
 # simulate errors and extract
+# In the kronecker, (phylogeny) independent trait-level covariance captured by Sigma_ind, taxon-level independent error captured by I.
 e = mvrnorm(1,rep(0,n*m),kronecker(Sigma_ind,I))
-# In the kronecker, (phylogenetically) independent trait-level covariance captured by Sigma_ind, taxon-level independent error captured by I.
 e1 <- e[1:n]
 e2 <- e[(1:n) + n]
 
@@ -723,26 +679,23 @@ m.2 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 nitt=210000, burnin=10000, thin=200,
                 pr = TRUE, verbose = FALSE)
 
-<<<<<<< HEAD
 ## brms
 p.b.2 <- set_prior(prior = rep(c("student_t(3, 0, 2.5)","student_t(3, 0, 2.5)", "student_t(3, 0.9, 2.5)"),2),
                    class = rep(c("sd","sigma","Intercept"),2), 
                    lb = rep(c(0,0,NA)), resp = rep(c("y1","y2"), each = 3))
 b.2.bf <- brmsformula(mvbind(y1, y2) ~ (1|b|gr(animal, cov = C))) + set_rescor(TRUE)
 b.2 <- brm(b.2.bf,
-=======
-## BRMS
-# p.b.2 <- set_prior("student_t(3, 0, 2.5)", class = c("sd","sigma","Intercept"), lb = c(0,0,NA))
-b.2 <- brm(mvbind(y1, y2) ~ (1|b|gr(animal, cov = C)),
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
            data = d2,
-           #prior = p.b.2,
+           prior = p.b.2,
            family = gaussian(), 
            data2 = list(C = C),
+<<<<<<< HEAD
+           cores = 2, chains = 2, iter = 3000, thin = 3)
+=======
            cores = 2, chains = 2, iter = 300, thin = 3)
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 ```
-
 
 \
 
@@ -789,7 +742,6 @@ quantile(m.2$VCV[,"traity1:traity2.units"]/
 
 Phylogenetic signal is calculated for each trait by substituting elements of the parameterized (co)variance matrices $\Sigma^{\mathrm{phy}}$ and $\Sigma^{\mathrm{ind}}$ into the calculation of $h^2$, e.g., for $y1$:
 
-
 ```{r, eval = F}
 
 # MCMCglmm
@@ -816,6 +768,7 @@ In previous simulations, we saw that Gaussian responses can be drawn directly fr
 
 \
 
+```{=tex}
 \begin{eqnarray}
 \begin{pmatrix}\mathbf{y_1} \\ \mathrm{logit}(\mathbf{p_2}) \end{pmatrix} &=& 
 \begin{pmatrix}\boldsymbol{\mu}_1 + \mathbf{b}_1 + \mathbf{e}_1 \\
@@ -826,7 +779,7 @@ In previous simulations, we saw that Gaussian responses can be drawn directly fr
 \mathbf{y_2} &\sim& \mathrm{binomial}(\mathbf{p_2})
 
 \end{eqnarray}
-
+```
 \
 
 ## Data Simulation
@@ -848,15 +801,13 @@ d3$obs <- 1:nrow(d3)
 
 ```
 
-
 \
 
 ## Model Specification
 
 Specification of this model changes very little for MCMCglmm; the second argument to `family` is simply specified as "threshold" (or alternatively, "categorical"). Prior specification requires more careful attention. For binomial variables, the residual variance is not identifiable. This is handled in MCMCglmm by fixing the residual variance of the binomial response to a nominal value (here, V = 1) in the prior specification. Fixing at higher values of V can improve mixing of the chain, but may also lead to numerical problems (see MCMCglmm course notes). Importantly, it is still possible to estimate residual correlations between traits even when the residual variance is fixed (i.e., fixing the width of the error variance for our traits does not prevent correlation between joint multivariate draws), hence we still specify `rcov = ~us(trait):units` in the code below (also see `~corg()` in MCMCglmm course notes). We also implement parameter expanded priors for the random effects, which are recommended for "threshold" models (for details see @de2018quantitative and associated tutorial).
 
-For brms, it is useful to specify separate formulae for each response variable when considering different error families. Unlike MCMCglmm, brms does not model additive overdispersion by default for non-gaussian traits. Thus, in order to model independent (co)variances, it is necessary to specify an additive overdispersion term in the form of an observation level random effect, ` (1|e|obs)`. However, this introduces an identifiability issue for the Gaussian error term, which cannot be silenced with default brms coding. Here, for simplicity, we have just constrained the Gaussian error term to be small (`sigma = 0.1`). A more appropriate (albeit technically demanding) solution is to edit the underlying stan code to prevent estimation of the redundant Gaussian error term.
-
+For brms, it is useful to specify separate formulae for each response variable when considering different error families. Unlike MCMCglmm, brms does not model additive overdispersion by default for non-gaussian traits. Thus, in order to model independent (co)variances, it is necessary to specify an additive overdispersion term in the form of an observation level random effect, `(1|e|obs)`. However, this introduces an identifiability issue for the Gaussian error term, which cannot be silenced with default brms coding. Here, for simplicity, we have just constrained the Gaussian error term to be small (`sigma = 0.1`). A more appropriate (albeit technically demanding) solution is to edit the underlying stan code to prevent estimation of the redundant Gaussian error term.
 
 ```{r eval=FALSE}
 
@@ -877,11 +828,17 @@ m.3 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
 bf_y1 <- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
 bf_y2 <- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
 
+<<<<<<< HEAD
+p.b.3 <- set_prior(prior = c("student_t(3, 0, 2.5)", "student_t(3, -1.2, 2.5)", rep("student_t(3, 0, 2.5)",2)),
+                   class = rep(c("sd","Intercept"),2), lb = rep(c(0,NA),2), 
+                   resp = rep(c("y1","y2"), each = 2))
+=======
 
 p.b.3 <- set_prior(prior = c(rep("student_t(3, 0, 2.5)",2), "student_t(3, 0.9, 2.5)",
                              rep("student_t(3, 0, 2.5)",3)),
                    class = rep(c("sd","sigma","Intercept"),2), 
                    lb = rep(c(0,0,NA)), resp = rep(c("y1","y2"), each = 3))
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 b.3 <- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
           data = d3, 
           family = gaussian(), 
@@ -902,14 +859,14 @@ For MR models including non-Gaussian traits, the calculation of partial correlat
 
 ### Phylogenetic Signal
 
-An important consequence of fixing the residual variance for our Bernoulli trait $\mathbf{y_2}$ is that $h^2$ is no longer an appropriate method for estimating phylogenetic signal. Specifically, for a Bernoulli trait, the amount of variation explained by shared ancestry is estimated by the intraclass correlation coefficient ($ICC$), and calculated as
+An important consequence of fixing the residual variance for our Bernoulli trait $\mathbf{y_2}$ is that $h^2$ is no longer an appropriate method for estimating phylogenetic signal. Specifically, for a Bernoulli trait, the amount of variation explained by shared ancestry is estimated as
 
+```{=tex}
 \begin{eqnarray}
-ICC_{\mathbf{y_2}} = \Sigma^{\mathrm{phy}}_{22}/(\Sigma^{\mathrm{phy}}_{22}+V+\pi^{2/3})
+h^2_{\mathrm{logit}} = \Sigma^{\mathrm{phy}}_{22}/(\Sigma^{\mathrm{phy}}_{22}+V+\pi^2/3)
 \end{eqnarray}
-
-where $V$ is the level of residual variance (additive over-dispersion) fixed in the prior specification (here, V = 1) and $\pi^{2/3}$ is the distribution specific variance term for the binomial distribution [see @nakagawa2013general for details]. 
-
+```
+where $V$ is the level of residual variance (additive over-dispersion) fixed in the prior specification (here, V = 1) and $\pi^2/3$ is the distribution specific variance term for the binomial distribution with logistic link [see @nakagawa2013general for details].
 
 ```{r eval=FALSE}
 # MCMCglmm
@@ -928,10 +885,7 @@ b.3 %>% as_tibble() %>%
 
 N.B. Even when dealing exclusively with Gaussian traits, adjustments to the calculation of $h^2$ are sometimes necessary. For example, when fixed effect predictors feature in the model, the variance explained by the fixed effects must be included in the denominator of the $h^2$ calculation [@de2016general].
 
-
-
 \
-
 
 # Model 4 - Leaf Economics in Eucalyptus
 
@@ -939,9 +893,7 @@ N.B. Even when dealing exclusively with Gaussian traits, adjustments to the calc
 
 We now present an example analysis using real data on leaf traits of Eucalyptus species from the AusTraits data set [@falster2021austraits]. Our intentions for this analysis were to evaluate evidence for: 1) phylogenetic signal in each trait; and 2) correlations between traits on the phylogenetic and independent level.
 
-We derived the phylogenetic correlation matrix $C$ from the maximum likelihood Eucalypt phylogeny presented in Thornhill et al. (2019), pruning the tree to include only those species for which data was available for the three target leaf traits: specific leaf area (SLA); nitrogen content per dry mass of leaf tissue ($\mathbf{N}$); and the ratio of carbon isotopes 12 and 13 in leaf tissue ($\delta{13}{}{\mathbf{C}}$). We chose to prune the tree to complete cases for simplicity, acknowledging work that suggests phylogenetic imputation may be a preferable approach to missing trait values in many circumstances (Debastiani et al. 2021, Penone et al. 2014); new methods are even capable of simultaneously addressing missing data and phylogenetic uncertainty Nakagawa and De Villemereuil 2019). We calculated species mean values and associated standard errors for each trait by pooling all observations at the species level. Correctly propagating sampling error is an important consideration for PMM of species mean trait values, and should motivate the researcher, as it can improve both parameter estimates and hypothesis tests of phylogenetic (co)variance components Ives et al. 2007. Where transformations to trait data were necessary, these were applied to individual observations, before means and standard errors were calculated, to avoid subsequent approximations of the standard error. Species for which the standard error of a trait could not be calculated because only a single observation was recorded were assigned a standard error equal to the 90th percentile of the standard error estimates for that trait across species. This represents a conservative approach to the assignment of unknown sampling variance in a meta-analytical context (Weir et al. 2018;  Ives et al. 2007).
-
-
+We derived the phylogenetic correlation matrix $C$ from the maximum likelihood Eucalypt phylogeny presented in [@thornhill2019dated], pruning the tree to include only those species for which data was available for the three target leaf traits: specific leaf area (SLA); nitrogen content per dry mass of leaf tissue ($\mathbf{N}$); and the ratio of carbon isotopes 12 and 13 in leaf tissue ($\delta{13}{}{\mathbf{C}}$). We chose to prune the tree to complete cases for simplicity, acknowledging work that suggests phylogenetic imputation may be a preferable approach to missing trait values in many circumstances (Debastiani et al. 2021, Penone et al. 2014); new methods are even capable of simultaneously addressing missing data and phylogenetic uncertainty Nakagawa and De Villemereuil 2019). We calculated species mean values and associated standard errors for each trait by pooling all observations at the species level. Correctly propagating sampling error is an important consideration for PMM of species mean trait values, and should motivate the researcher, as it can improve both parameter estimates and hypothesis tests of phylogenetic (co)variance components Ives et al. 2007. Where transformations to trait data were necessary, these were applied to individual observations, before means and standard errors were calculated, to avoid subsequent approximations of the standard error. Species for which the standard error of a trait could not be calculated because only a single observation was recorded were assigned a standard error equal to the 90th percentile of the standard error estimates for that trait across species. This represents a conservative approach to the assignment of unknown sampling variance in a meta-analytical context (Weir et al. 2018; Ives et al. 2007).
 
 
 ```{r echo=FALSE, eval = FALSE}
@@ -1008,6 +960,12 @@ d.sub2 <- d.sub %>% select(animal, log_SLA, se_log_SLA,N, se_N,d13C,se_d13C)
 
 ```
 
+<<<<<<< HEAD
+
+First, let's read in the data and tree and fit the model
+
+=======
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 ```{r eval=FALSE}
 
 # phy1 <- ???
@@ -1031,11 +989,16 @@ b.mod <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
 
 \
 
+<<<<<<< HEAD
+## Convergence Diagnostics
+
+Our model shows adequate convergence
+=======
 ## Model Validation
 
 For model validation, we calculated marginal and conditional posterior predictive checks. These verified the capacity of the model to generate plausible data (Figure 3). The proportion of data included in the nominal predictive intervals was generally good for both methods, but tended to be lower for N and d13C. The shortfall in predictive capacity for these traits may indicate the model is missing important covariates. We took additional steps toward predictive assessment using LOO-CV, but found the approximate method [@burkner2021] failed for a reasonable proportion of the data, necessitating manual re-fits of the model, which we did not pursue (see tutorial).
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
-<<<<<<< HEAD
 ```{r, eval = FALSE}
 
 # read in model
@@ -1059,6 +1022,20 @@ mcmc_neff(neff_ratio(fit, pars = r_pars))
 
 rstan::check_hmc_diagnostics(fit$fit)
 
+<<<<<<< HEAD
+```
+
+\
+
+## Model Validation
+
+We explore two approaches to model validation: 1) we assessed within-sample predictive capacity using marginal and conditional posterior predictive checks; and 2) we assessed out-of-sample predictive capacity using LOO-CV. Our pp checks verify the capacity of the model to generate plausible data; the proportion of data included in the nominal predictive intervals is generally close to expectation, but tends to be lower for N and d13C. The shortfall in predictive capacity for these traits may indicate the model is missing important covariates.
+
+
+```{r, eval = FALSE}
+
+=======
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 #----------------------------
 # posterior predictive checks
 #----------------------------
@@ -1099,6 +1076,16 @@ ggarrange(ppM1,ppM2,ppM3, nrow = 3, legend = "none") %>%
 
 get_coverage(ppM1$data);get_coverage(ppM2$data);get_coverage(ppM3$data)
 
+<<<<<<< HEAD
+```
+
+
+For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable proportion of the data, necessitating manual re-fits of the model. The computational demand of re-fitting such a large model for more than few troublesome test data points is probably not feasible for the average desktop workstation. However, as HPC becomes more accessible to the average researcher, manual re-fitting procedures may represent a viable option to LOO-CV of MR-PMM.
+
+```{r, eval = FALSE}
+
+=======
+>>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 #----------------
 # loo predictions
 #----------------
@@ -1170,15 +1157,16 @@ ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$log_SLA, cov1, "logSLA"),
           ncol = 1)
 
 ```
+
+<<<<<<< HEAD
+\
+
 =======
 >>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
-
 ## Inference
-
 
 ### Phylogenetic Signal
 
-<<<<<<< HEAD
 ``` {r, eval = FALSE}
 
 b.mod %>% as_tibble() %>% 
@@ -1200,23 +1188,16 @@ summary(b.mod)
 
 ```
 
-=======
-
-### Partial Correlations
-
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 \
 
 ## Notes
 
-By using the consensus tree from Thornhill et al. (2019) to compute $C$, we assume this phylogeny is known without error. In reality, phylogenies are inferred from sequence data with uncertainty, and thus represent mere hypotheses of the evolutionary relationships between taxa. Where-ever possible, it is preferable to propagate this uncertainty into our models. In a fully Bayesian setting, integrating over phylogenetic uncertainty is achieved by fitting models to a posterior sample of trees, e.g. with a function such as `brms_multiple`. When sequence data are available, an even more integrative approach is to infer phylogenies jointly with the estimation of trait correlations in the likelihood function (e.g. Cybis et al. 2016). We did not have access to a full posterior distribution of trees, though Thornhill et al. (2019) do present three alternative consensus trees; two inferred by ML and a third representing a consensus tree from a Bayesian analysis. Therefore, as an informal approach to test how sensitive results were to phylogenetic uncertainty, we fit the model to each tree separately and confirmed that each fit produced qualitatively equivalent parameter estimates (results not shown).
+By using the consensus tree from [@thornhill2019dated] to compute $C$, we assume this phylogeny is known without error. In reality, phylogenies are inferred from sequence data with uncertainty, and thus represent mere hypotheses of the evolutionary relationships between taxa. Where-ever possible, it is preferable to propagate this uncertainty into our models. In a fully Bayesian setting, integrating over phylogenetic uncertainty is achieved by fitting models to a posterior sample of trees, e.g. with a function such as `brms_multiple`. When sequence data are available, an even more integrative approach is to infer phylogenies jointly with the estimation of trait correlations in the likelihood function (e.g. Cybis et al. 2016). We did not have access to a full posterior distribution of trees, though Thornhill et al. (2019) do present three alternative consensus trees; two inferred by ML and a third representing a consensus tree from a Bayesian analysis. Therefore, as an informal approach to test how sensitive results were to phylogenetic uncertainty, we fit the model to each tree separately and confirmed that each fit produced qualitatively equivalent parameter estimates (results not shown).
 
-For discussion of the results of this analysis, see the manuscript.
-
+For discussion of the results of this analysis, see the manuscript at https://doi.org/10.1101/2022.12.13.520338.
 
 \
 \
 
 # References
-
