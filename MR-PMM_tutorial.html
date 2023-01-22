@@ -2262,11 +2262,8 @@ b.2 &lt;- brm(b.2.bf,
            prior = p.b.2,
            family = gaussian(), 
            data2 = list(C = C),
-&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
            cores = 2, chains = 2, iter = 3000, thin = 3)
-=======
-           cores = 2, chains = 2, iter = 300, thin = 3)
-&gt;&gt;&gt;&gt;&gt;&gt;&gt; 2867b60eda93727eb8d7dec4f91e7ab261cb653c</code></pre>
+           cores = 2, chains = 2, iter = 300, thin = 3)</code></pre>
 <p><br />
 </p>
 </div>
@@ -2444,17 +2441,11 @@ m.3 &lt;- MCMCglmm(cbind(y1, y2) ~ trait-1,
 bf_y1 &lt;- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
 bf_y2 &lt;- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
 
-&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+
 p.b.3 &lt;- set_prior(prior = c(&quot;student_t(3, 0, 2.5)&quot;, &quot;student_t(3, -1.2, 2.5)&quot;, rep(&quot;student_t(3, 0, 2.5)&quot;,2)),
                    class = rep(c(&quot;sd&quot;,&quot;Intercept&quot;),2), lb = rep(c(0,NA),2), 
                    resp = rep(c(&quot;y1&quot;,&quot;y2&quot;), each = 2))
-=======
 
-p.b.3 &lt;- set_prior(prior = c(rep(&quot;student_t(3, 0, 2.5)&quot;,2), &quot;student_t(3, 0.9, 2.5)&quot;,
-                             rep(&quot;student_t(3, 0, 2.5)&quot;,3)),
-                   class = rep(c(&quot;sd&quot;,&quot;sigma&quot;,&quot;Intercept&quot;),2), 
-                   lb = rep(c(0,0,NA)), resp = rep(c(&quot;y1&quot;,&quot;y2&quot;), each = 3))
-&gt;&gt;&gt;&gt;&gt;&gt;&gt; 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 b.3 &lt;- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
           data = d3, 
           family = gaussian(), 
@@ -2547,10 +2538,7 @@ error equal to the 90th percentile of the standard error estimates for
 that trait across species. This represents a conservative approach to
 the assignment of unknown sampling variance in a meta-analytical context
 (Weir et al. 2018; Ives et al. 2007).</p>
-<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</p>
 <p>First, let’s read in the data and tree and fit the model</p>
-<p>======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;
-2867b60eda93727eb8d7dec4f91e7ab261cb653c</p>
 <pre class="r"><code># phy1 &lt;- ???
 # d.sub2 &lt;- ???
 C &lt;- ape::vcv.phylo(phy1, corr = T)
@@ -2569,10 +2557,10 @@ b.mod &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
 # saveRDS(b.1, file = &quot;b.1.rds&quot;)</code></pre>
 <p><br />
 </p>
-<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD ## Convergence Diagnostics</p>
+<div id="convergence-diagnostics-1" class="section level2">
+<h2>Convergence Diagnostics</h2>
+<p>Our model shows adequate convergence</p>
 </div>
-<div id="our-model-shows-adequate-convergence" class="section level1">
-<h1>Our model shows adequate convergence</h1>
 <div id="model-validation-1" class="section level2">
 <h2>Model Validation</h2>
 <p>For model validation, we calculated marginal and conditional
@@ -2585,8 +2573,7 @@ covariates. We took additional steps toward predictive assessment using
 LOO-CV, but found the approximate method <span class="citation">(<a href="#ref-burkner2021" role="doc-biblioref">Bürkner, Gabry, and Vehtari
 2021</a>)</span> failed for a reasonable proportion of the data,
 necessitating manual re-fits of the model, which we did not pursue (see
-tutorial). &gt;&gt;&gt;&gt;&gt;&gt;&gt;
-2867b60eda93727eb8d7dec4f91e7ab261cb653c</p>
+tutorial).</p>
 <pre class="r"><code># read in model
 fit &lt;- readRDS(&quot;b.mod.rds&quot;)
 
@@ -2606,9 +2593,7 @@ mcmc_trace(fit, pars = pars)
 mcmc_rhat(rhat(fit, pars = r_pars))
 mcmc_neff(neff_ratio(fit, pars = r_pars))
 
-rstan::check_hmc_diagnostics(fit$fit)
-
-&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code></pre>
+rstan::check_hmc_diagnostics(fit$fit)</code></pre>
 <p><br />
 </p>
 </div>
@@ -2622,9 +2607,7 @@ generate plausible data; the proportion of data included in the nominal
 predictive intervals is generally close to expectation, but tends to be
 lower for N and d13C. The shortfall in predictive capacity for these
 traits may indicate the model is missing important covariates.</p>
-<pre class="r"><code>=======
-&gt;&gt;&gt;&gt;&gt;&gt;&gt; 2867b60eda93727eb8d7dec4f91e7ab261cb653c
-#----------------------------
+<pre class="r"><code>#----------------------------
 # posterior predictive checks
 #----------------------------
 
@@ -2662,9 +2645,9 @@ ppM3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;,
 ggarrange(ppM1,ppM2,ppM3, nrow = 3, legend = &quot;none&quot;) %&gt;% 
   annotate_figure(top = &quot;PP-check: marginalised over Gaussian distribution of random effects&quot;)
 
-get_coverage(ppM1$data);get_coverage(ppM2$data);get_coverage(ppM3$data)
-
-&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code></pre>
+get_coverage(ppM1$data);get_coverage(ppM2$data);get_coverage(ppM3$data)</code></pre>
+<p><br />
+</p>
 <p>For LOO-CV, we find the approximate method <span class="citation">(<a href="#ref-burkner2021" role="doc-biblioref">Bürkner, Gabry, and Vehtari
 2021</a>)</span> fails for a reasonable proportion of the data,
 necessitating manual re-fits of the model. The computational demand of
@@ -2673,9 +2656,7 @@ points is probably not feasible for the average desktop workstation.
 However, as HPC becomes more accessible to the average researcher,
 manual re-fitting procedures may represent a viable option to LOO-CV of
 MR-PMM.</p>
-<pre class="r"><code>=======
-&gt;&gt;&gt;&gt;&gt;&gt;&gt; 2867b60eda93727eb8d7dec4f91e7ab261cb653c
-#----------------
+<pre class="r"><code>#----------------
 # loo predictions
 #----------------
 
@@ -2744,10 +2725,11 @@ ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$log_SLA, cov1, &quot;logSLA&qu
           plot_loo_pred(loo_pred_probs2, fit$data$N, cov2, &quot;N&quot;),
           plot_loo_pred(loo_pred_probs3, fit$data$d13C, cov3, &quot;d13C&quot;),
           ncol = 1)</code></pre>
-<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD<br />
+<p><br />
 </p>
-<p>======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;
-2867b60eda93727eb8d7dec4f91e7ab261cb653c ## Inference</p>
+</div>
+<div id="inference-3" class="section level2">
+<h2>Inference</h2>
 <div id="phylogenetic-signal-3" class="section level3">
 <h3>Phylogenetic Signal</h3>
 <pre class="r"><code>b.mod %&gt;% as_tibble() %&gt;% 

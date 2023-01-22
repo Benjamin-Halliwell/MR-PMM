@@ -689,11 +689,8 @@ b.2 <- brm(b.2.bf,
            prior = p.b.2,
            family = gaussian(), 
            data2 = list(C = C),
-<<<<<<< HEAD
            cores = 2, chains = 2, iter = 3000, thin = 3)
-=======
            cores = 2, chains = 2, iter = 300, thin = 3)
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 
 ```
 
@@ -828,17 +825,11 @@ m.3 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
 bf_y1 <- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
 bf_y2 <- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
 
-<<<<<<< HEAD
+
 p.b.3 <- set_prior(prior = c("student_t(3, 0, 2.5)", "student_t(3, -1.2, 2.5)", rep("student_t(3, 0, 2.5)",2)),
                    class = rep(c("sd","Intercept"),2), lb = rep(c(0,NA),2), 
                    resp = rep(c("y1","y2"), each = 2))
-=======
 
-p.b.3 <- set_prior(prior = c(rep("student_t(3, 0, 2.5)",2), "student_t(3, 0.9, 2.5)",
-                             rep("student_t(3, 0, 2.5)",3)),
-                   class = rep(c("sd","sigma","Intercept"),2), 
-                   lb = rep(c(0,0,NA)), resp = rep(c("y1","y2"), each = 3))
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 b.3 <- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
           data = d3, 
           family = gaussian(), 
@@ -960,12 +951,8 @@ d.sub2 <- d.sub %>% select(animal, log_SLA, se_log_SLA,N, se_N,d13C,se_d13C)
 
 ```
 
-<<<<<<< HEAD
-
 First, let's read in the data and tree and fit the model
 
-=======
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 ```{r eval=FALSE}
 
 # phy1 <- ???
@@ -989,15 +976,14 @@ b.mod <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
 
 \
 
-<<<<<<< HEAD
 ## Convergence Diagnostics
 
 Our model shows adequate convergence
-=======
+
 ## Model Validation
 
 For model validation, we calculated marginal and conditional posterior predictive checks. These verified the capacity of the model to generate plausible data (Figure 3). The proportion of data included in the nominal predictive intervals was generally good for both methods, but tended to be lower for N and d13C. The shortfall in predictive capacity for these traits may indicate the model is missing important covariates. We took additional steps toward predictive assessment using LOO-CV, but found the approximate method [@burkner2021] failed for a reasonable proportion of the data, necessitating manual re-fits of the model, which we did not pursue (see tutorial).
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
+
 
 ```{r, eval = FALSE}
 
@@ -1022,7 +1008,6 @@ mcmc_neff(neff_ratio(fit, pars = r_pars))
 
 rstan::check_hmc_diagnostics(fit$fit)
 
-<<<<<<< HEAD
 ```
 
 \
@@ -1034,8 +1019,6 @@ We explore two approaches to model validation: 1) we assessed within-sample pred
 
 ```{r, eval = FALSE}
 
-=======
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 #----------------------------
 # posterior predictive checks
 #----------------------------
@@ -1076,16 +1059,14 @@ ggarrange(ppM1,ppM2,ppM3, nrow = 3, legend = "none") %>%
 
 get_coverage(ppM1$data);get_coverage(ppM2$data);get_coverage(ppM3$data)
 
-<<<<<<< HEAD
 ```
 
+\
 
 For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable proportion of the data, necessitating manual re-fits of the model. The computational demand of re-fitting such a large model for more than few troublesome test data points is probably not feasible for the average desktop workstation. However, as HPC becomes more accessible to the average researcher, manual re-fitting procedures may represent a viable option to LOO-CV of MR-PMM.
 
 ```{r, eval = FALSE}
 
-=======
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 #----------------
 # loo predictions
 #----------------
@@ -1158,11 +1139,9 @@ ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$log_SLA, cov1, "logSLA"),
 
 ```
 
-<<<<<<< HEAD
+
 \
 
-=======
->>>>>>> 2867b60eda93727eb8d7dec4f91e7ab261cb653c
 ## Inference
 
 ### Phylogenetic Signal
