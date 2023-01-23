@@ -16,12 +16,18 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 
-library(rstan);library(brms)
-library(tidyverse);library(ggplot2);library(knitr);library(MCMCglmm);library(bayesplot)
-library(geiger);library(ape);library(caper);library(parallel);library(coda);library(dplyr)
 knitr::opts_chunk$set(echo = TRUE, dev="png", dpi=96)
+
+library(rstan);library(brms);library(dplyr);library(tidyverse)
+library(ggplot2);library(ggpubr);library(knitr);library(MCMCglmm);library(bayesplot)
+library(geiger);library(ape);library(caper);library(parallel);library(coda)
+
+m.1 <- readRDS("m.1.rds");b.1 <- readRDS("b.1.rds")
+m.2 <- readRDS("m.2.rds");b.2 <- readRDS("b.2.rds")
+m.3 <- readRDS("m.3.rds");b.3 <- readRDS("b.3.rds")
+
+
 ```
 
 This tutorial is associated with the article "Multi-Response Phylogenetic Mixed Models: Concepts and Application"
@@ -172,7 +178,6 @@ I &=&
 
 Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data. To simulate data under this model, we simply construct our variable, $y$, from the linear combination of predictors specified by the model, by supplying vectors of length $n$ for each of the quantities $\mu$, $b$, and $e$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $b$ and $e$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\mu$ = $\beta_0$).
 
-\
 
 ```{r eval=FALSE}
 
@@ -221,7 +226,6 @@ summary(d)
 
 With our tree and trait data simulated, we can now fit the model:
 
-\
 
 ```{r eval=FALSE}
 
@@ -457,9 +461,7 @@ With this design, the phylogenetic random effects must also be realised jointly 
 \Sigma &=& \Sigma^{\mathrm{phy}} \otimes C + \Sigma^{\mathrm{ind}} \otimes I
 \end{eqnarray}\
 
-Notice that the two taxon-level variance structures we encountered in the univariate case above ($C$ and $I$) remain, but we must now also consider trait-level covariance operating at both the phylogenetic and independent level. This is achieved via the Kronecker operation $\otimes$ (see matrix expansions below).
-
-$\Sigma^{\mathrm{phy}}$ is an $m\times m$ phylogenetic trait-level VCV matrix where $m$ is the number of response traits in the model,
+Notice that the two taxon-level variance structures we encountered in the univariate case above ($C$ and $I$) remain, but we must now also consider trait-level covariance operating at both the phylogenetic and independent level. This is achieved via the Kronecker operation $\otimes$ (see matrix expansions below). The phylogenetic trait-level VCV matrix $\Sigma^{\mathrm{phy}}$ is $m\times m$, where $m$ is the number of response traits in the model,
 
 \
 
@@ -680,10 +682,11 @@ m.2 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 pr = TRUE, verbose = FALSE)
 
 ## brms
+b.2.bf <- brmsformula(mvbind(y1, y2) ~ (1|b|gr(animal, cov = C))) + set_rescor(TRUE)
+
 p.b.2 <- set_prior(prior = rep(c("student_t(3, 0, 2.5)","student_t(3, 0, 2.5)", "student_t(3, 0.9, 2.5)"),2),
                    class = rep(c("sd","sigma","Intercept"),2), 
                    lb = rep(c(0,0,NA)), resp = rep(c("y1","y2"), each = 3))
-b.2.bf <- brmsformula(mvbind(y1, y2) ~ (1|b|gr(animal, cov = C))) + set_rescor(TRUE)
 b.2 <- brm(b.2.bf,
            data = d2,
            prior = p.b.2,
@@ -829,7 +832,7 @@ bf_y2 <- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli
 p.b.3 <- set_prior(prior = c("student_t(3, 0, 2.5)", "student_t(3, -1.2, 2.5)", rep("student_t(3, 0, 2.5)",2)),
                    class = rep(c("sd","Intercept"),2), lb = rep(c(0,NA),2), 
                    resp = rep(c("y1","y2"), each = 2))
-
+prior_summary(b.3)
 b.3 <- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
           data = d3, 
           family = gaussian(), 
@@ -867,8 +870,8 @@ where $V$ is the level of residual variance (additive over-dispersion) fixed in 
 # BRMS
 b.3 %>% as_tibble() %>% 
         dplyr::select(Sigma_phy_22 = sd_animal__y2_Intercept) %>% 
-        mutate(ICC_y2 = Sigma_phy_22^2/(Sigma_phy_22 + 1 + pi^2/3)) %>% 
-        pull(ICC_y2) %>% quantile(probs=c(0.025,0.5,0.975))
+        mutate(h2_logit_y2 = Sigma_phy_22^2/(Sigma_phy_22^2 + 1 + pi^2/3)) %>% 
+        pull(h2_logit_y2) %>% quantile(probs=c(0.025,0.5,0.975))
 
 ```
 
@@ -884,93 +887,28 @@ N.B. Even when dealing exclusively with Gaussian traits, adjustments to the calc
 
 We now present an example analysis using real data on leaf traits of Eucalyptus species from the AusTraits data set [@falster2021austraits]. Our intentions for this analysis were to evaluate evidence for: 1) phylogenetic signal in each trait; and 2) correlations between traits on the phylogenetic and independent level.
 
-We derived the phylogenetic correlation matrix $C$ from the maximum likelihood Eucalypt phylogeny presented in [@thornhill2019dated], pruning the tree to include only those species for which data was available for the three target leaf traits: specific leaf area (SLA); nitrogen content per dry mass of leaf tissue ($\mathbf{N}$); and the ratio of carbon isotopes 12 and 13 in leaf tissue ($\delta{13}{}{\mathbf{C}}$). We chose to prune the tree to complete cases for simplicity, acknowledging work that suggests phylogenetic imputation may be a preferable approach to missing trait values in many circumstances (Debastiani et al. 2021, Penone et al. 2014); new methods are even capable of simultaneously addressing missing data and phylogenetic uncertainty Nakagawa and De Villemereuil 2019). We calculated species mean values and associated standard errors for each trait by pooling all observations at the species level. Correctly propagating sampling error is an important consideration for PMM of species mean trait values, and should motivate the researcher, as it can improve both parameter estimates and hypothesis tests of phylogenetic (co)variance components Ives et al. 2007. Where transformations to trait data were necessary, these were applied to individual observations, before means and standard errors were calculated, to avoid subsequent approximations of the standard error. Species for which the standard error of a trait could not be calculated because only a single observation was recorded were assigned a standard error equal to the 90th percentile of the standard error estimates for that trait across species. This represents a conservative approach to the assignment of unknown sampling variance in a meta-analytical context (Weir et al. 2018; Ives et al. 2007).
+We derived the phylogenetic correlation matrix $C$ from the maximum likelihood Eucalypt phylogeny "ML1", presented in [@thornhill2019dated], pruning the tree to include only those species for which data was available (n = 316) for all three target leaf traits: specific leaf area (SLA); nitrogen content per dry mass of leaf tissue ($\mathbf{N}$); and the ratio of carbon isotopes 12 and 13 in leaf tissue ($\delta{13}{}{\mathbf{C}}$). We calculated species mean values and associated standard errors for each trait by pooling all observations at the species level. Where transformations to trait data were necessary, these were applied to individual observations, before means and standard errors were calculated, to avoid subsequent approximations of the standard error. Species for which the standard error of a trait could not be calculated because only a single observation was recorded were assigned a standard error equal to the 90th percentile of the standard error estimates for that trait across species. This represents a conservative approach to the assignment of unknown sampling variance in a meta-analytical context [@weir2018dealing;@ives2007within].
 
-
-```{r echo=FALSE, eval = FALSE}
-
-# read in data and tree
-d.master <- read.csv("d.master_V4.csv")
-tree.ML1 <- read.tree(file="tree.ML1.tre")
-
-# resolve polytomies and make clock-like
-tree.ML1 <- multi2di(tree.ML1, random = F)
-tree.ML1$node.label <- (length(tree.ML1$tip.label)+1):(tree.ML1$Nnode+length(tree.ML1$tip.label))
-tree.ML1.u <- force.ultrametric(tree.ML1)
-phy1 <- tree.ML1.u
-
-# set plot view
-par(mar=(c(2,2,2,2)))
-
-# resolve any near zero branch lengths
-for (i in 1:3){phy1$edge.length[phy1$edge.length<=0.00001] <- 0.0001
-phy1 <- force.ultrametric(phy1)}
-
-
-## SUBSET TO SYMPHYOMYRTUS AND EUCALYPTUS ##
-d.subgen <- d.master[d.master$subgenus=="Symphyomyrtus"|d.master$subgenus=="Eucalyptus",]
-row.names(d.subgen) <-  1:nrow(d.subgen)
-d.subgen$subgenus <- as.factor(d.subgen$subgenus)
-
-tree.subgen <- keep.tip(phy1, d.subgen$taxon)
-for (i in 1:3){tree.subgen$edge.length[tree.subgen$edge.length<=0.00001] <- 0.005
-tree.subgen <- force.ultrametric(tree.subgen)}
-
-## COMPLETE CASES FOR TRAITS
-d.sub <- d.subgen[!is.na(d.subgen$SLA)&
-                    !is.na(d.subgen$leaf_N_per_dry_mass)&
-                    !is.na(d.subgen$leaf_delta13C),]
-
-# # subset data and other trees to Bayes tree
-# d.sub <- d.sub[d.sub$taxon %in% phy3$tip.label,]
-# phy1 <- keep.tip(phy1, d.sub$taxon)
-# phy2 <- keep.tip(phy2, d.sub$taxon)
-# phy3 <- keep.tip(phy3, d.sub$taxon)
-names(d.sub)[names(d.sub)=="se.specific_leaf_area"] <- "se.SLA"
-d.sub$obs <- 1:nrow(d.sub)
-
-# ensure all SE are positive by adding min SE observed for trait to any that equal 0
-d.sub[!is.na(d.sub$se.SLA) & d.sub$se.SLA==0,]$se.SLA <- min(d.sub[!is.na(d.sub$se.SLA) & d.sub$se.SLA!=0,]$se.SLA)
-d.sub[!is.na(d.sub$se.leaf_N_per_dry_mass) & d.sub$se.leaf_N_per_dry_mass==0,]$se.leaf_N_per_dry_mass <- min(d.sub[!is.na(d.sub$se.leaf_N_per_dry_mass) & d.sub$se.leaf_N_per_dry_mass!=0,]$se.leaf_N_per_dry_mass)
-d.sub[!is.na(d.sub$se.leaf_delta13C) & d.sub$se.leaf_delta13C==0,]$se.leaf_delta13C <- min(d.sub[!is.na(d.sub$se.leaf_delta13C) & d.sub$se.leaf_delta13C!=0,]$se.leaf_delta13C)
-
-# for any NAs, make SE the 90th pctl. of SE for that trait
-d.sub[is.na(d.sub$se.SLA),]$se.SLA <- quantile(d.sub[!is.na(d.sub$se.SLA),]$se.SLA, 0.9)
-d.sub[is.na(d.sub$se.leaf_N_per_dry_mass),]$se.leaf_N_per_dry_mass <- quantile(d.sub[!is.na(d.sub$se.leaf_N_per_dry_mass),]$se.leaf_N_per_dry_mass, 0.9)
-d.sub[is.na(d.sub$se.leaf_delta13C),]$se.leaf_delta13C <- quantile(d.sub[!is.na(d.sub$se.leaf_delta13C),]$se.leaf_delta13C, 0.9)
-
-
-# log-transform SLA and compute first-order standard error estimates (i.e. relative error) via delta method (se.SLA/SLA)
-d.sub <- d.sub %>% as_tibble %>% mutate(log_SLA = log(SLA), se_log_SLA = se.SLA/SLA,
-                                        N = leaf_N_per_dry_mass, se_N = se.leaf_N_per_dry_mass,
-                                        d13C = leaf_delta13C, se_d13C = se.leaf_delta13C)
-# subset to relevant columns
-d.sub2 <- d.sub %>% select(animal, log_SLA, se_log_SLA,N, se_N,d13C,se_d13C)
-
-
-
-```
-
-First, let's read in the data and tree and fit the model
+First, let's read in the data/tree and fit the model. Based on warning messages issued when fitting with default control settings, we have increased `max_treedepth` to 12.
 
 ```{r eval=FALSE}
 
-# phy1 <- ???
-# d.sub2 <- ???
-C <- ape::vcv.phylo(phy1, corr = T)
+euc_data <- read.csv("euc_data.csv")
+euc_phy <- read.tree("euc_phy.tre")
+C <- ape::vcv.phylo(euc_phy, corr = T)
 
 # BRMS
-bf_y1 <- bf(log_SLA | resp_se(se_log_SLA, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
-bf_y2 <- bf(N | resp_se(se_N, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
-bf_y3 <- bf(d13C | resp_se(se_d13C, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
+bf_y1 <- brmsformula(log_SLA | resp_se(se_log_SLA, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
+bf_y2 <- brmsformula(N | resp_se(se_N, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
+bf_y3 <- brmsformula(d13C | resp_se(se_d13C, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
 
-b.mod <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
-            data = d.sub2, 
+b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
+            data = euc_data, 
             family = gaussian(), 
             data2 = list(C = C),
             control=list(adapt_delta = 0.85, max_treedepth = 12),
+            save_pars = save_pars(all = TRUE),
             cores = 4, chains = 4, iter = 6000, thin = 3)
-# saveRDS(b.1, file = "b.1.rds")
 
 ```
 
@@ -978,35 +916,24 @@ b.mod <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
 
 ## Convergence Diagnostics
 
-Our model shows adequate convergence
-
-## Model Validation
-
-For model validation, we calculated marginal and conditional posterior predictive checks. These verified the capacity of the model to generate plausible data (Figure 3). The proportion of data included in the nominal predictive intervals was generally good for both methods, but tended to be lower for N and d13C. The shortfall in predictive capacity for these traits may indicate the model is missing important covariates. We took additional steps toward predictive assessment using LOO-CV, but found the approximate method [@burkner2021] failed for a reasonable proportion of the data, necessitating manual re-fits of the model, which we did not pursue (see tutorial).
-
+Next, we confirm that our model fit passes standard convergence diagnostics.
 
 ```{r, eval = FALSE}
 
-# read in model
-fit <- readRDS("b.mod.rds")
-
-# define select function
-select <- dplyr::select
-
-# names of model parameters, excluding random effects and log-probability
-pars <- fit %>% as_tibble %>% select(-starts_with("r_"),-"lp__") %>% names
-r_pars <- fit %>% as_tibble %>% select(starts_with("r_")) %>% names
-
+# names of model parameters, excluding random effects and saved pars
+pars <- b.euc %>% as_tibble %>% select(-starts_with(c("r_","z_","L_","Lres","lp"))) %>% names
+# names of random effects
+r_pars <- b.euc %>% as_tibble %>% select(starts_with("r_")) %>% names
 
 #------------------------
 # convergence diagnostics
 #------------------------
 
-mcmc_trace(fit, pars = pars)
-mcmc_rhat(rhat(fit, pars = r_pars))
-mcmc_neff(neff_ratio(fit, pars = r_pars))
+mcmc_trace(b.euc, pars = pars)
+mcmc_rhat(rhat(b.euc, pars = r_pars))
+mcmc_neff(neff_ratio(b.euc, pars = r_pars))
 
-rstan::check_hmc_diagnostics(fit$fit)
+rstan::check_hmc_diagnostics(b.euc$fit)
 
 ```
 
@@ -1014,7 +941,9 @@ rstan::check_hmc_diagnostics(fit$fit)
 
 ## Model Validation
 
-We explore two approaches to model validation: 1) we assessed within-sample predictive capacity using marginal and conditional posterior predictive checks; and 2) we assessed out-of-sample predictive capacity using LOO-CV. Our pp checks verify the capacity of the model to generate plausible data; the proportion of data included in the nominal predictive intervals is generally close to expectation, but tends to be lower for N and d13C. The shortfall in predictive capacity for these traits may indicate the model is missing important covariates.
+We explore two approaches to model validation: 1) we assessed within-sample predictive capacity using marginal and conditional posterior predictive checks; and 2) we assessed out-of-sample predictive capacity using LOO-CV. 
+
+For the first approach, posterior predictive checks verify the capacity of the model to generate plausible data; the proportion of data included in the nominal predictive intervals is generally close to expectation for each response trait.
 
 
 ```{r, eval = FALSE}
@@ -1023,41 +952,45 @@ We explore two approaches to model validation: 1) we assessed within-sample pred
 # posterior predictive checks
 #----------------------------
 
+# function to compute coverage
 get_coverage <- function(data) data %>%
   transmute(cov90 = (hh >= y_obs) & (ll <= y_obs),
             cov50 = (h >= y_obs) & (l <= y_obs)) %>% 
   map_dbl(sum)
 
-
-# prediction conditional on species-level random-intercept estimates
-# N.B. worth fitting skew normal for SLA?
-ppC1 <- pp_check(fit, resp= "logSLA", type = "intervals") + labs(subtitle = "Response: logSLA")
-ppC2 <- pp_check(fit, resp= "N", type = "intervals") + labs(subtitle = "Response: N")
-ppC3 <- pp_check(fit, resp= "d13C", type = "intervals") + labs(subtitle = "Response: d13C")
-
+# CONDITIONAL
+# i.e., prediction conditional on species-level random-intercept estimates
+ppC1 <- pp_check(b.euc, resp= "logSLA", type = "intervals") + 
+                labs(subtitle = "Response: logSLA", x = "")
+ppC2 <- pp_check(b.euc, resp= "N", type = "intervals") + 
+                labs(subtitle = "Response: N", x = "")
+ppC3 <- pp_check(b.euc, resp= "d13C", type = "intervals") + 
+                labs(subtitle = "Response: d13C", x = "taxon (index)")
+# plot
 ggarrange(ppC1, ppC2, ppC3, nrow = 3, legend = "none") %>% 
   annotate_figure(top = "PP-check: conditional on species-level random-intercept estimates")
+# compute coverage
+list(ppC1$data,ppC2$data,ppC3$data) %>% lapply(get_coverage) %>% unlist() %>% 
+  matrix(3,2,byrow=T,dimnames=list(c("logSLA","N","d13C"),c("cov90","cov50")))
 
-get_coverage(ppC1$data);get_coverage(ppC2$data);get_coverage(ppC3$data)
-
-
-# prediction marginalised over Gaussian distribution of random effects
-ppM1 <- pp_check(fit, resp= "logSLA", type = "intervals", 
+# MARGINAL
+# i.e., prediction marginalised over Gaussian distribution of random effects
+ppM1 <- pp_check(b.euc, resp= "logSLA", type = "intervals", 
                 allow_new_levels = T, sample_new_levels = "gaussian",
-                newdata = fit$data %>% mutate(animal = NA)) + labs(subtitle = "Response: logSLA")
-
-ppM2 <- pp_check(fit, resp= "N", type = "intervals", 
+                newdata = b.euc$data %>% mutate(animal = NA)) + 
+                labs(subtitle = "Response: logSLA", x = "")
+ppM2 <- pp_check(b.euc, resp= "N", type = "intervals", 
                 allow_new_levels = T, sample_new_levels = "gaussian",
-                newdata = fit$data %>% mutate(animal = NA)) + labs(subtitle = "Response: N")
-
-ppM3 <- pp_check(fit, resp= "d13C", type = "intervals", 
+                newdata = b.euc$data %>% mutate(animal = NA)) + 
+                labs(subtitle = "Response: N", x = "")
+ppM3 <- pp_check(b.euc, resp= "d13C", type = "intervals", 
                 allow_new_levels = T, sample_new_levels = "gaussian", 
-                newdata = fit$data %>% mutate(animal = NA)) + labs(subtitle = "Response: d13C")
-
-ggarrange(ppM1,ppM2,ppM3, nrow = 3, legend = "none") %>% 
+                newdata = b.euc$data %>% mutate(animal = NA)) + 
+                labs(subtitle = "Response: d13C", x = "taxon (index)")
+ggarrange(ppM1,ppM2,ppM3, nrow = 3, align = "hv", legend = "none") %>% 
   annotate_figure(top = "PP-check: marginalised over Gaussian distribution of random effects")
-
-get_coverage(ppM1$data);get_coverage(ppM2$data);get_coverage(ppM3$data)
+list(ppM1$data,ppM2$data,ppM3$data) %>% lapply(get_coverage) %>% unlist() %>% 
+  matrix(3,2,byrow=T,dimnames=list(c("logSLA","N","d13C"),c("cov90","cov50")))
 
 ```
 
@@ -1071,26 +1004,33 @@ For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable
 # loo predictions
 #----------------
 
-# m <- readRDS("b.mod.rds")
-# m.new <- m %>% update(save_pars = save_pars(all = TRUE))
-# future::plan(multisession(workers = 6))
-# m.loo <- loo(m.new, moment_match = T, cores = 6, save_psis = T, reloo = T, future = T)
-# loo_pred <- loo_predict(m.new, psis = m.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
+b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
+            data = euc_data, 
+            family = gaussian(), 
+            data2 = list(C = C),
+            control=list(adapt_delta = 0.85, max_treedepth = 12),
+            save_pars = save_pars(all = TRUE),
+            cores = 4, chains = 4, iter = 6000, thin = 3)
+
+# fit.new <- fit %>% update(save_pars = save_pars(all = TRUE))
+future::plan(multisession(workers = 8))
+fit.loo <- loo(b.euc, moment_match = T, cores = 8, save_psis = T, reloo = T, future = T)
+loo_pred <- loo_predict(b.euc, psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
 
 
 # draw posterior samples
-ppred <- posterior_predict(fit)
+ppred <- posterior_predict(b.euc)
 ppred1 <- ppred[,,1] # logSLA
 ppred2 <- ppred[,,2] # N
 ppred3 <- ppred[,,3] # d13C
 
 # compute importance sampling weights
-log_ratios1 <- -1*log_lik(fit, resp = "logSLA")
-log_ratios2 <- -1*log_lik(fit, resp = "N")
-log_ratios3 <- -1*log_lik(fit, resp = "d13C")
-r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:12, each = 1000))
-r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:12, each = 1000))
-r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:12, each = 1000))
+log_ratios1 <- -1*log_lik(b.euc, resp = "logSLA")
+log_ratios2 <- -1*log_lik(b.euc, resp = "N")
+log_ratios3 <- -1*log_lik(b.euc, resp = "d13C")
+r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 500))
+r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 500))
+r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 500))
 psis1 <- loo::psis(log_ratios1, cores = 10, r_eff = r_eff1)
 psis2 <- loo::psis(log_ratios2, cores = 10, r_eff = r_eff2)
 psis3 <- loo::psis(log_ratios3, cores = 10, r_eff = r_eff3)
@@ -1110,12 +1050,12 @@ loo_pred_probs3 <- loo_pred3$value %>% t %>% as.data.frame() %>% as_tibble()
 colnames(loo_pred_probs1) <- colnames(loo_pred_probs2) <- colnames(loo_pred_probs3) <- c("ll","l","m","h","hh")
 
 # compute coverage
-cov1 <- loo_pred_probs1 %>% mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = fit$data$log_SLA) %>% 
-  get_coverage() * 100/length(fit$data$animal); cov1 <- round(cov1)
-cov2 <- loo_pred_probs2 %>% mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = fit$data$N) %>% 
-  get_coverage() * 100/length(fit$data$animal); cov2 <- round(cov2)
-cov3 <- loo_pred_probs3 %>% mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = fit$data$d13C) %>% 
-  get_coverage() * 100/length(fit$data$animal); cov3 <- round(cov3)
+cov1 <- loo_pred_probs1 %>% mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = b.euc$data$log_SLA) %>% 
+  get_coverage() * 100/length(b.euc$data$animal); cov1 <- round(cov1)
+cov2 <- loo_pred_probs2 %>% mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = b.euc$data$N) %>% 
+  get_coverage() * 100/length(b.euc$data$animal); cov2 <- round(cov2)
+cov3 <- loo_pred_probs3 %>% mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = b.euc$data$d13C) %>% 
+  get_coverage() * 100/length(b.euc$data$animal); cov3 <- round(cov3)
 
 # plot function
 plot_loo_pred <- function(x,y_obs,cov, ylab = "y") x %>%  
@@ -1125,16 +1065,16 @@ plot_loo_pred <- function(x,y_obs,cov, ylab = "y") x %>%
   ggplot(aes(x)) +
   geom_point(aes(y=m), size =3, col = blues9[4]) +
   geom_linerange(aes(ymin = ll, ymax = hh), col = blues9[4]) +
-  geom_linerange(aes(ymin = l, ymax = h), size = 1, col = blues9[4]) +
+  geom_linerange(aes(ymin = l, ymax = h), linewidth = 1, col = blues9[4]) +
   geom_point(aes(y = y_obs)) +
   theme_classic() +
   labs(y = ylab, subtitle = paste("Coverage: ", cov[1], "% at 90th quantile, ",cov[2],"% at 50th quantile"),
        title = "LOO-predictive checks")
 
 # main plot
-ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$log_SLA, cov1, "logSLA"),
-          plot_loo_pred(loo_pred_probs2, fit$data$N, cov2, "N"),
-          plot_loo_pred(loo_pred_probs3, fit$data$d13C, cov3, "d13C"),
+ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, "logSLA"),
+          plot_loo_pred(loo_pred_probs2, b.euc$data$N, cov2, "N"),
+          plot_loo_pred(loo_pred_probs3, b.euc$data$d13C, cov3, "d13C"),
           ncol = 1)
 
 ```
@@ -1146,16 +1086,18 @@ ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$log_SLA, cov1, "logSLA"),
 
 ### Phylogenetic Signal
 
+Our first aim was to assess 
+
 ``` {r, eval = FALSE}
 
-b.mod %>% as_tibble() %>% 
-        dplyr::select(sigma_b_SLA = sd_animal__log_SLA_Intercept, sigma_e_SLA = sigma_log_SLA,
+b.euc %>% as_tibble() %>% 
+        dplyr::select(sigma_b_SLA = sd_animal__logSLA_Intercept, sigma_e_SLA = sigma_logSLA,
                       sigma_b_N = sd_animal__N_Intercept, sigma_e_N = sigma_N,
                       sigma_b_d13C = sd_animal__d13C_Intercept, sigma_e_d13C = sigma_d13C) %>% 
         mutate(h2_SLA = sigma_b_SLA^2/(sigma_b_SLA^2 + sigma_e_SLA^2),
                h2_N = sigma_b_N^2/(sigma_b_N^2 + sigma_e_N^2),
                h2_d13C = sigma_b_d13C^2/(sigma_b_d13C^2 + sigma_e_d13C^2)) %>% 
-        pull(h2_SLA, h2_N, h2_d13C) %>% quantile(probs=c(0.025,0.5,0.975))
+        select(h2_SLA, h2_N, h2_d13C) %>% lapply(quantile, probs=c(0.025,0.5,0.975))
 
 ```
 
@@ -1163,7 +1105,7 @@ b.mod %>% as_tibble() %>%
 
 ``` {r, eval = FALSE}
 
-summary(b.mod)
+summary(b.euc)
 
 ```
 
