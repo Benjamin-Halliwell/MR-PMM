@@ -1086,7 +1086,7 @@ ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, "logSLA"),
 
 ### Phylogenetic Signal
 
-Our first aim was to assess 
+Our first aim was to assess phylogenetic signal ($h^2$) in our response traits:
 
 ``` {r, eval = FALSE}
 
@@ -1103,9 +1103,11 @@ b.euc %>% as_tibble() %>%
 
 ### Partial Correlations
 
+Our second aim was to assess partial correlations between response traits:
+
 ``` {r, eval = FALSE}
 
-summary(b.euc)
+summary(b.mod)
 
 ```
 

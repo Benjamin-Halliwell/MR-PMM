@@ -2711,7 +2711,7 @@ ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, &quot;logSLA&
 <h2>Inference</h2>
 <div id="phylogenetic-signal-3" class="section level3">
 <h3>Phylogenetic Signal</h3>
-<p>Our first aim was to assess</p>
+<p>Our first aim was to assess phylogenetic signal (<span class="math inline">\(h^2\)</span>) in our response traits:</p>
 <pre class="r"><code>b.euc %&gt;% as_tibble() %&gt;% 
         dplyr::select(sigma_b_SLA = sd_animal__logSLA_Intercept, sigma_e_SLA = sigma_logSLA,
                       sigma_b_N = sd_animal__N_Intercept, sigma_e_N = sigma_N,
@@ -2723,7 +2723,9 @@ ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, &quot;logSLA&
 </div>
 <div id="partial-correlations-2" class="section level3">
 <h3>Partial Correlations</h3>
-<pre class="r"><code>summary(b.euc)</code></pre>
+<p>Our second aim was to assess partial correlations between response
+traits:</p>
+<pre class="r"><code>summary(b.mod)</code></pre>
 <p><br />
 </p>
 </div>
