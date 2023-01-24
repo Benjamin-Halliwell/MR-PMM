@@ -19,14 +19,14 @@ output:
 
 knitr::opts_chunk$set(echo = TRUE, dev="png", dpi=96)
 
-library(rstan);library(brms);library(dplyr);library(tidyverse)
+library(rstan);library(brms);library(dplyr);library(tidyverse);library(tidybayes)
 library(ggplot2);library(ggpubr);library(knitr);library(MCMCglmm);library(bayesplot)
-library(geiger);library(ape);library(caper);library(parallel);library(coda)
+library(geiger);library(ape);library(phytools);library(caper);library(parallel);library(coda)
 
 m.1 <- readRDS("m.1.rds");b.1 <- readRDS("b.1.rds")
 m.2 <- readRDS("m.2.rds");b.2 <- readRDS("b.2.rds")
 m.3 <- readRDS("m.3.rds");b.3 <- readRDS("b.3.rds")
-
+b.euc <- readRDS("b.euc.rds")
 
 ```
 
@@ -50,7 +50,7 @@ Throughout this tutorial, we explore a low dimensional example (tree with only 5
 
 \
 
-# Model 1 - Univariate Gaussian
+# Model 1 - Single-Response Gaussian
 
 \
 
@@ -179,7 +179,7 @@ I &=&
 Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data. To simulate data under this model, we simply construct our variable, $y$, from the linear combination of predictors specified by the model, by supplying vectors of length $n$ for each of the quantities $\mu$, $b$, and $e$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $b$ and $e$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\mu$ = $\beta_0$).
 
 
-```{r eval=FALSE}
+```{r eval=T}
 
 ## SIMULATE FROM PMM
 
@@ -215,10 +215,17 @@ y = u + b + e
 animal <- phy$tip.label # "animal" is a reserved term in MCMCglmm for taxon ID
 d <- data.frame(animal,y)
 
-## PLOT HEATMAP of traits against phy
-summary(d)
+```
+
+Plotting our simulated data against the tree indicates phylogenetic structure in the distribution of trait values
+
+```{r, eval=T}
+
+y <- as.matrix(d$y);rownames(y) <- d$animal
+plotTree.barplot(phy,y,args.plotTree=list(ftype="off"))
 
 ```
+
 
 \
 
@@ -828,11 +835,11 @@ m.3 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
 bf_y1 <- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
 bf_y2 <- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
 
-
-p.b.3 <- set_prior(prior = c("student_t(3, 0, 2.5)", "student_t(3, -1.2, 2.5)", rep("student_t(3, 0, 2.5)",2)),
-                   class = rep(c("sd","Intercept"),2), lb = rep(c(0,NA),2), 
-                   resp = rep(c("y1","y2"), each = 2))
-prior_summary(b.3)
+p.b.3 <- prior(student_t(3, 0, 2.5), class = "Intercept", resp = "y1", lb = NA) +
+  prior(student_t(3, 0, 2.5), class = "Intercept", resp = "y2", lb = NA) +
+  prior(student_t(3, 0, 2.5), class = "sd", resp = "y1", lb = 0) +
+  prior(student_t(3, 0, 2.5), class = "sd", resp = "y2", lb = 0) +
+  prior(constant(1), class = "sd", resp = "y2", group = "obs", lb = 0)
 b.3 <- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
           data = d3, 
           family = gaussian(), 
@@ -889,13 +896,20 @@ We now present an example analysis using real data on leaf traits of Eucalyptus 
 
 We derived the phylogenetic correlation matrix $C$ from the maximum likelihood Eucalypt phylogeny "ML1", presented in [@thornhill2019dated], pruning the tree to include only those species for which data was available (n = 316) for all three target leaf traits: specific leaf area (SLA); nitrogen content per dry mass of leaf tissue ($\mathbf{N}$); and the ratio of carbon isotopes 12 and 13 in leaf tissue ($\delta{13}{}{\mathbf{C}}$). We calculated species mean values and associated standard errors for each trait by pooling all observations at the species level. Where transformations to trait data were necessary, these were applied to individual observations, before means and standard errors were calculated, to avoid subsequent approximations of the standard error. Species for which the standard error of a trait could not be calculated because only a single observation was recorded were assigned a standard error equal to the 90th percentile of the standard error estimates for that trait across species. This represents a conservative approach to the assignment of unknown sampling variance in a meta-analytical context [@weir2018dealing;@ives2007within].
 
-First, let's read in the data/tree and fit the model. Based on warning messages issued when fitting with default control settings, we have increased `max_treedepth` to 12.
+First, let's read in the tree and data.
 
-```{r eval=FALSE}
+```{r eval=TRUE}
 
 euc_data <- read.csv("euc_data.csv")
 euc_phy <- read.tree("euc_phy.tre")
 C <- ape::vcv.phylo(euc_phy, corr = T)
+
+```
+
+
+For model fitting, we have set `max_treedepth = 12` based on warning messages issued when using default control settings.
+
+```{r eval=FALSE}
 
 # BRMS
 bf_y1 <- brmsformula(log_SLA | resp_se(se_log_SLA, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
@@ -943,10 +957,10 @@ rstan::check_hmc_diagnostics(b.euc$fit)
 
 We explore two approaches to model validation: 1) we assessed within-sample predictive capacity using marginal and conditional posterior predictive checks; and 2) we assessed out-of-sample predictive capacity using LOO-CV. 
 
-For the first approach, posterior predictive checks verify the capacity of the model to generate plausible data; the proportion of data included in the nominal predictive intervals is generally close to expectation for each response trait.
+For the first approach, posterior predictive checks verify the capacity of the model to generate plausible data; the proportion of data included in the nominal predictive intervals is generally close to expectation for each method and response trait.
 
 
-```{r, eval = FALSE}
+```{r eval=T, message=F, fig.dim=c(6,6)}
 
 #----------------------------
 # posterior predictive checks
@@ -961,36 +975,55 @@ get_coverage <- function(data) data %>%
 # CONDITIONAL
 # i.e., prediction conditional on species-level random-intercept estimates
 ppC1 <- pp_check(b.euc, resp= "logSLA", type = "intervals") + 
-                labs(subtitle = "Response: logSLA", x = "")
+                labs(y = "log(SLA)", x = "")
 ppC2 <- pp_check(b.euc, resp= "N", type = "intervals") + 
-                labs(subtitle = "Response: N", x = "")
+                labs(y = "N", x = "")
 ppC3 <- pp_check(b.euc, resp= "d13C", type = "intervals") + 
-                labs(subtitle = "Response: d13C", x = "taxon (index)")
+                labs(y = bquote(delta^13*C), x = "taxon (index)")
+
+covC1 <- ppC1$data %>% get_coverage() * 100/length(b.euc$data$animal); covC1 <- round(covC1)
+covC2 <- ppC2$data %>% get_coverage() * 100/length(b.euc$data$animal); covC2 <- round(covC2)
+covC3 <- ppC3$data %>% get_coverage() * 100/length(b.euc$data$animal); covC3 <- round(covC3)
+
 # plot
-ggarrange(ppC1, ppC2, ppC3, nrow = 3, legend = "none") %>% 
-  annotate_figure(top = "PP-check: conditional on species-level random-intercept estimates")
-# compute coverage
-list(ppC1$data,ppC2$data,ppC3$data) %>% lapply(get_coverage) %>% unlist() %>% 
-  matrix(3,2,byrow=T,dimnames=list(c("logSLA","N","d13C"),c("cov90","cov50")))
+ggarrange(ppC1 + labs(subtitle = paste0("Coverage: ", covC1[1], "% at 90th quantile, ",
+                                       covC1[2],"% at 50th quantile")), 
+          ppC2 + labs(subtitle = paste0("Coverage: ", covC2[1], "% at 90th quantile, ", 
+                                       covC2[2],"% at 50th quantile")), 
+          ppC3 + labs(subtitle = paste0("Coverage: ", covC3[1], "% at 90th quantile, ", 
+                                       covC3[2],"% at 50th quantile")),
+          nrow = 3, align = "hv", legend = "none") %>% 
+  annotate_figure(top = "PP-checks: conditional on species-level random-intercept estimates")
+
 
 # MARGINAL
 # i.e., prediction marginalised over Gaussian distribution of random effects
 ppM1 <- pp_check(b.euc, resp= "logSLA", type = "intervals", 
                 allow_new_levels = T, sample_new_levels = "gaussian",
                 newdata = b.euc$data %>% mutate(animal = NA)) + 
-                labs(subtitle = "Response: logSLA", x = "")
+                labs(y = "log(SLA)", x = "")
 ppM2 <- pp_check(b.euc, resp= "N", type = "intervals", 
                 allow_new_levels = T, sample_new_levels = "gaussian",
                 newdata = b.euc$data %>% mutate(animal = NA)) + 
-                labs(subtitle = "Response: N", x = "")
+                labs(y = "N", x = "")
 ppM3 <- pp_check(b.euc, resp= "d13C", type = "intervals", 
                 allow_new_levels = T, sample_new_levels = "gaussian", 
                 newdata = b.euc$data %>% mutate(animal = NA)) + 
-                labs(subtitle = "Response: d13C", x = "taxon (index)")
-ggarrange(ppM1,ppM2,ppM3, nrow = 3, align = "hv", legend = "none") %>% 
-  annotate_figure(top = "PP-check: marginalised over Gaussian distribution of random effects")
-list(ppM1$data,ppM2$data,ppM3$data) %>% lapply(get_coverage) %>% unlist() %>% 
-  matrix(3,2,byrow=T,dimnames=list(c("logSLA","N","d13C"),c("cov90","cov50")))
+                labs(y = bquote(delta^13*C), x = "taxon (index)")
+
+covM1 <- ppM1$data %>% get_coverage() * 100/length(b.euc$data$animal); covM1 <- round(covM1)
+covM2 <- ppM2$data %>% get_coverage() * 100/length(b.euc$data$animal); covM2 <- round(covM2)
+covM3 <- ppM3$data %>% get_coverage() * 100/length(b.euc$data$animal); covM3 <- round(covM3)
+
+ggarrange(ppM1 + labs(subtitle = paste0("Coverage: ", covM1[1], "% at 90th quantile, ",
+                                       covM1[2],"% at 50th quantile")), 
+          ppM2 + labs(subtitle = paste0("Coverage: ", covM2[1], "% at 90th quantile, ", 
+                                       covM2[2],"% at 50th quantile")), 
+          ppM3 + labs(subtitle = paste0("Coverage: ", covM3[1], "% at 90th quantile, ", 
+                                       covM3[2],"% at 50th quantile")),
+          nrow = 3, align = "hv", legend = "none") %>%  
+  annotate_figure(top = "PP-checks: marginalised over Gaussian distribution of random effects")
+
 
 ```
 
@@ -998,23 +1031,24 @@ list(ppM1$data,ppM2$data,ppM3$data) %>% lapply(get_coverage) %>% unlist() %>%
 
 For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable proportion of the data, necessitating manual re-fits of the model. The computational demand of re-fitting such a large model for more than few troublesome test data points is probably not feasible for the average desktop workstation. However, as HPC becomes more accessible to the average researcher, manual re-fitting procedures may represent a viable option to LOO-CV of MR-PMM.
 
-```{r, eval = FALSE}
+```{r, eval = T, warning = F, fig.dim=c(6,6)}
 
 #----------------
-# loo predictions
+# LOO predictions
 #----------------
 
 b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
-            data = euc_data, 
-            family = gaussian(), 
+            data = euc_data,
+            family = gaussian(),
             data2 = list(C = C),
             control=list(adapt_delta = 0.85, max_treedepth = 12),
             save_pars = save_pars(all = TRUE),
             cores = 4, chains = 4, iter = 6000, thin = 3)
+saveRDS(b.euc, "b.euc.rds")
+future::plan(future::multisession(workers = 6))
+fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = F, future = T, future_args = list())
+# fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = T, future = T, future_args = list())
 
-# fit.new <- fit %>% update(save_pars = save_pars(all = TRUE))
-future::plan(multisession(workers = 8))
-fit.loo <- loo(b.euc, moment_match = T, cores = 8, save_psis = T, reloo = T, future = T)
 loo_pred <- loo_predict(b.euc, psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
 
 
@@ -1028,9 +1062,9 @@ ppred3 <- ppred[,,3] # d13C
 log_ratios1 <- -1*log_lik(b.euc, resp = "logSLA")
 log_ratios2 <- -1*log_lik(b.euc, resp = "N")
 log_ratios3 <- -1*log_lik(b.euc, resp = "d13C")
-r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 1000))
-r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 1000))
-r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 1000))
+r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 500))
+r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 500))
+r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 500))
 psis1 <- loo::psis(log_ratios1, cores = 10, r_eff = r_eff1)
 psis2 <- loo::psis(log_ratios2, cores = 10, r_eff = r_eff2)
 psis3 <- loo::psis(log_ratios3, cores = 10, r_eff = r_eff3)
@@ -1050,15 +1084,18 @@ loo_pred_probs3 <- loo_pred3$value %>% t %>% as.data.frame() %>% as_tibble()
 colnames(loo_pred_probs1) <- colnames(loo_pred_probs2) <- colnames(loo_pred_probs3) <- c("ll","l","m","h","hh")
 
 # compute coverage
-cov1 <- loo_pred_probs1 %>% mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = b.euc$data$log_SLA) %>% 
+cov1 <- loo_pred_probs1 %>% 
+  mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = b.euc$data$log_SLA) %>% 
   get_coverage() * 100/length(b.euc$data$animal); cov1 <- round(cov1)
-cov2 <- loo_pred_probs2 %>% mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = b.euc$data$N) %>% 
+cov2 <- loo_pred_probs2 %>% 
+  mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = b.euc$data$N) %>% 
   get_coverage() * 100/length(b.euc$data$animal); cov2 <- round(cov2)
-cov3 <- loo_pred_probs3 %>% mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = b.euc$data$d13C) %>% 
+cov3 <- loo_pred_probs3 %>% 
+  mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = b.euc$data$d13C) %>% 
   get_coverage() * 100/length(b.euc$data$animal); cov3 <- round(cov3)
 
 # plot function
-plot_loo_pred <- function(x,y_obs,cov, ylab = "y") x %>%  
+plot_loo_pred <- function(x,y_obs,cov,xlab,ylab) x %>%  
   mutate(y_obs = y_obs) %>% 
   arrange(m) %>% 
   mutate(x = 1:n()) %>% 
@@ -1068,14 +1105,15 @@ plot_loo_pred <- function(x,y_obs,cov, ylab = "y") x %>%
   geom_linerange(aes(ymin = l, ymax = h), linewidth = 1, col = blues9[4]) +
   geom_point(aes(y = y_obs)) +
   theme_classic() +
-  labs(y = ylab, subtitle = paste("Coverage: ", cov[1], "% at 90th quantile, ",cov[2],"% at 50th quantile"),
-       title = "LOO-predictive checks")
+  labs(x = xlab, y = ylab, 
+       subtitle = paste("Coverage: ", cov[1], "% at 90th quantile, ", cov[2],"% at 50th quantile"))
 
 # main plot
-ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, "logSLA"),
-          plot_loo_pred(loo_pred_probs2, b.euc$data$N, cov2, "N"),
-          plot_loo_pred(loo_pred_probs3, b.euc$data$d13C, cov3, "d13C"),
-          ncol = 1)
+ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, "", "logSLA"),
+          plot_loo_pred(loo_pred_probs2, b.euc$data$N, cov2, "", "N"),
+          plot_loo_pred(loo_pred_probs3, b.euc$data$d13C, cov3, "taxon (index)",bquote(delta^13*C)),
+          ncol = 1, align = "hv") %>% 
+  annotate_figure(top = "LOO predictive checks: out-of-sample predictive assessment")
 
 ```
 
@@ -1088,7 +1126,7 @@ ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, "logSLA"),
 
 Our first aim was to assess phylogenetic signal ($h^2$) in our response traits:
 
-``` {r, eval = FALSE}
+``` {r, eval = T}
 
 b.euc %>% as_tibble() %>% 
         dplyr::select(sigma_b_SLA = sd_animal__logSLA_Intercept, sigma_e_SLA = sigma_logSLA,
@@ -1097,17 +1135,40 @@ b.euc %>% as_tibble() %>%
         mutate(h2_SLA = sigma_b_SLA^2/(sigma_b_SLA^2 + sigma_e_SLA^2),
                h2_N = sigma_b_N^2/(sigma_b_N^2 + sigma_e_N^2),
                h2_d13C = sigma_b_d13C^2/(sigma_b_d13C^2 + sigma_e_d13C^2)) %>% 
-        select(h2_SLA, h2_N, h2_d13C) %>% lapply(quantile, probs=c(0.025,0.5,0.975))
+        dplyr::select(h2_SLA, h2_N, h2_d13C) %>% lapply(quantile, probs=c(0.025,0.5,0.975))
 
 ```
 
 ### Partial Correlations
 
-Our second aim was to assess partial correlations between response traits:
+Our second aim was to assess partial correlations between response traits. These are reported in the model summary and summarized in the figure below.
 
-``` {r, eval = FALSE}
+``` {r, eval = T, warning = F}
+b.euc
 
-summary(b.euc)
+b.euc$fit %>%
+  gather_draws(cor_animal__logSLA_Intercept__N_Intercept,
+               cor_animal__logSLA_Intercept__d13C_Intercept,
+               cor_animal__N_Intercept__d13C_Intercept,
+               rescor__logSLA__N,
+               rescor__logSLA__d13C,
+               rescor__N__d13C) %>%
+  median_hdi(.width = c(0.95, 0.5)) %>% 
+  mutate(cor = rep(rep(c("SLA ~ d13C","SLA ~ N_mass","N_mass ~ d13C"),2),2)) %>% 
+  mutate(level = rep(rep(c("phy","ind"),each=3),2)) %>%
+  ggplot(aes(y = cor, x = .value, xmin = .lower, xmax = .upper, col = level)) +
+  geom_pointinterval(position = position_dodge(width = 0.25)) +
+  geom_vline(xintercept = 0, col = "grey70", lty = "longdash") +
+  theme_classic() + 
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14)) +
+  xlab("correlation estimate") + ylab("") + xlim(-1,1) +
+  scale_color_manual(values = c("red", "#0072B2")) + 
+  scale_y_discrete(labels=c("SLA ~ N_mass" = bquote(SLA~"~"~N[mass]),
+                            "SLA ~ d13C" = bquote(SLA~"~"~delta^13*C),
+                            "N_mass ~ d13C" = bquote(N[mass]~"~"~delta^13*C)))
 
 ```
 
