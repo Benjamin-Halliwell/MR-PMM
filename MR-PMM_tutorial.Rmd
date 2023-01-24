@@ -1028,9 +1028,9 @@ ppred3 <- ppred[,,3] # d13C
 log_ratios1 <- -1*log_lik(b.euc, resp = "logSLA")
 log_ratios2 <- -1*log_lik(b.euc, resp = "N")
 log_ratios3 <- -1*log_lik(b.euc, resp = "d13C")
-r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 500))
-r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 500))
-r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 500))
+r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 1000))
+r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 1000))
+r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 1000))
 psis1 <- loo::psis(log_ratios1, cores = 10, r_eff = r_eff1)
 psis2 <- loo::psis(log_ratios2, cores = 10, r_eff = r_eff2)
 psis3 <- loo::psis(log_ratios3, cores = 10, r_eff = r_eff3)
@@ -1107,7 +1107,7 @@ Our second aim was to assess partial correlations between response traits:
 
 ``` {r, eval = FALSE}
 
-summary(b.mod)
+summary(b.euc)
 
 ```
 
