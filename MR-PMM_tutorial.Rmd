@@ -217,7 +217,7 @@ d <- data.frame(animal,y)
 
 ```
 
-Plotting our simulated data against the tree indicates phylogenetic structure in the distribution of trait values
+We can plot our simulated data against the tree for a visual assessment of phylogenetic structure in the distribution of trait values
 
 ```{r, eval=T}
 
