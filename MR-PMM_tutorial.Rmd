@@ -1037,19 +1037,19 @@ For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable
 # LOO predictions
 #----------------
 
-b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
-            data = euc_data,
-            family = gaussian(),
-            data2 = list(C = C),
-            control=list(adapt_delta = 0.85, max_treedepth = 12),
-            save_pars = save_pars(all = TRUE),
-            cores = 4, chains = 4, iter = 6000, thin = 3)
-saveRDS(b.euc, "b.euc.rds")
-future::plan(future::multisession(workers = 6))
-fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = F, future = T, future_args = list())
-# fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = T, future = T, future_args = list())
-
-loo_pred <- loo_predict(b.euc, psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
+## more concise version under construction
+# b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
+#             data = euc_data,
+#             family = gaussian(),
+#             data2 = list(C = C),
+#             control=list(adapt_delta = 0.85, max_treedepth = 12),
+#             save_pars = save_pars(all = TRUE),
+#             cores = 4, chains = 4, iter = 6000, thin = 3)
+# saveRDS(b.euc, "b.euc.rds")
+# future::plan(future::multisession(workers = 6))
+# fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = F, future = T, future_args = list())
+# # fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = T, future = T, future_args = list())
+# loo_pred <- loo_predict(b.euc, psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
 
 
 # draw posterior samples
