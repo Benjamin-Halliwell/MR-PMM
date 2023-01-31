@@ -922,9 +922,16 @@ b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
             data2 = list(C = C),
             control=list(adapt_delta = 0.85, max_treedepth = 12),
             save_pars = save_pars(all = TRUE),
-            cores = 4, chains = 4, iter = 6000, thin = 3)
+            cores = 2, chains = 2, iter = 6000, thin = 3)
 
 ```
+
+```{r eval=TRUE, echo=F}
+
+b.euc <- readRDS("b.euc.rds")
+
+```
+
 
 \
 
@@ -1031,70 +1038,53 @@ ggarrange(ppM1 + labs(subtitle = paste0("Coverage: ", covM1[1], "% at 90th quant
 
 For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable proportion of the data, necessitating manual re-fits of the model. The computational demand of re-fitting such a large model for more than few troublesome test data points is probably not feasible for the average desktop workstation. However, as HPC becomes more accessible to the average researcher, manual re-fitting procedures may represent a viable option to LOO-CV of MR-PMM.
 
-```{r, eval = T, warning = F, fig.dim=c(6,6)}
+```{r, eval = F, warning = F}
 
 #----------------
 # LOO predictions
 #----------------
 
-## more concise version under construction
-# b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
-#             data = euc_data,
-#             family = gaussian(),
-#             data2 = list(C = C),
-#             control=list(adapt_delta = 0.85, max_treedepth = 12),
-#             save_pars = save_pars(all = TRUE),
-#             cores = 4, chains = 4, iter = 6000, thin = 3)
-# saveRDS(b.euc, "b.euc.rds")
-# future::plan(future::multisession(workers = 6))
-# fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = F, future = T, future_args = list())
-# # fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = T, future = T, future_args = list())
-# loo_pred <- loo_predict(b.euc, psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
+# perform LOO cross-validation in parallel using 'future' package
+future::plan(future::multisession(workers = 6))
+fit.loo <- loo(b.euc, moment_match = T, cores = 6, save_psis = T, reloo = F, future = T, future_args = list())
+# saveRDS(fit.loo, "fit.loo.rds")
+
+```
+
+```{r, eval = T, echo = F}
 
 
-# draw posterior samples
-ppred <- posterior_predict(b.euc)
-ppred1 <- ppred[,,1] # logSLA
-ppred2 <- ppred[,,2] # N
-ppred3 <- ppred[,,3] # d13C
+fit.loo <-  readRDS("fit.loo.rds")
 
-# compute importance sampling weights
-log_ratios1 <- -1*log_lik(b.euc, resp = "logSLA")
-log_ratios2 <- -1*log_lik(b.euc, resp = "N")
-log_ratios3 <- -1*log_lik(b.euc, resp = "d13C")
-r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 500))
-r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 500))
-r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 500))
-psis1 <- loo::psis(log_ratios1, cores = 10, r_eff = r_eff1)
-psis2 <- loo::psis(log_ratios2, cores = 10, r_eff = r_eff2)
-psis3 <- loo::psis(log_ratios3, cores = 10, r_eff = r_eff3)
+```
 
-# generate loo quantile predictions via PSIS
-loo_pred1 <- loo::E_loo(ppred1,psis_object = psis1, log_ratios = log_ratios1, type = "quantile", 
-                        probs = c(0.05,0.25,0.5,0.75,0.95))
-loo_pred2 <- loo::E_loo(ppred2,psis_object = psis2, log_ratios = log_ratios2, type = "quantile", 
-                        probs = c(0.05,0.25,0.5,0.75,0.95))
-loo_pred3 <- loo::E_loo(ppred3,psis_object = psis3, log_ratios = log_ratios3, type = "quantile", 
-                        probs = c(0.05,0.25,0.5,0.75,0.95))
+Compute LOO predictions, calculate coverage and plot.
+
+```{r, eval = T, warning = F, fig.dim=c(6,6)}
+
+# compute LOO predictions
+loo_pred1 <- loo_predict(b.euc, resp = "logSLA", psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
+loo_pred2 <- loo_predict(b.euc, resp = "N", psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
+loo_pred3 <- loo_predict(b.euc, resp = "d13C", psis = fit.loo$psis_object, type = "quantile", probs = c(0.05,0.25,0.5,0.75,0.95))
 
 # collate loo estimates
-loo_pred_probs1 <- loo_pred1$value %>% t %>% as.data.frame() %>% as_tibble()
-loo_pred_probs2 <- loo_pred2$value %>% t %>% as.data.frame() %>% as_tibble()
-loo_pred_probs3 <- loo_pred3$value %>% t %>% as.data.frame() %>% as_tibble()
+loo_pred_probs1 <- loo_pred1 %>% t %>% as.data.frame() %>% as_tibble()
+loo_pred_probs2 <- loo_pred2 %>% t %>% as.data.frame() %>% as_tibble()
+loo_pred_probs3 <- loo_pred3 %>% t %>% as.data.frame() %>% as_tibble()
 colnames(loo_pred_probs1) <- colnames(loo_pred_probs2) <- colnames(loo_pred_probs3) <- c("ll","l","m","h","hh")
 
 # compute coverage
 cov1 <- loo_pred_probs1 %>% 
-  mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = b.euc$data$log_SLA) %>% 
+  mutate(x = 1:n(), k = fit.loo$diagnostics$pareto_k, y_obs = b.euc$data$log_SLA) %>% 
   get_coverage() * 100/length(b.euc$data$animal); cov1 <- round(cov1)
 cov2 <- loo_pred_probs2 %>% 
-  mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = b.euc$data$N) %>% 
+  mutate(x = 1:n(), k = fit.loo$diagnostics$pareto_k, y_obs = b.euc$data$N) %>% 
   get_coverage() * 100/length(b.euc$data$animal); cov2 <- round(cov2)
 cov3 <- loo_pred_probs3 %>% 
-  mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = b.euc$data$d13C) %>% 
+  mutate(x = 1:n(), k = fit.loo$diagnostics$pareto_k, y_obs = b.euc$data$d13C) %>% 
   get_coverage() * 100/length(b.euc$data$animal); cov3 <- round(cov3)
 
-# plot function
+# define plot function
 plot_loo_pred <- function(x,y_obs,cov,xlab,ylab) x %>%  
   mutate(y_obs = y_obs) %>% 
   arrange(m) %>% 
@@ -1108,7 +1098,7 @@ plot_loo_pred <- function(x,y_obs,cov,xlab,ylab) x %>%
   labs(x = xlab, y = ylab, 
        subtitle = paste("Coverage: ", cov[1], "% at 90th quantile, ", cov[2],"% at 50th quantile"))
 
-# main plot
+# plot
 ggarrange(plot_loo_pred(loo_pred_probs1, b.euc$data$log_SLA, cov1, "", "logSLA"),
           plot_loo_pred(loo_pred_probs2, b.euc$data$N, cov2, "", "N"),
           plot_loo_pred(loo_pred_probs3, b.euc$data$d13C, cov3, "taxon (index)",bquote(delta^13*C)),
