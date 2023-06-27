@@ -183,7 +183,7 @@ I &=&
 
 ## Data Simulation
 
-Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data. To simulate data under this model, we simply construct our variable, $\mathbf{y}$, from the linear combination of predictors specified by the model, by supplying vectors of length $n$ for each of the quantities $\boldsymbol{\mu}$, $\mathbf{b}$, and $\mathbf{e}$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $\mathbf{b}$ and $\mathbf{e}$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\mathbf{\mu}$ = $\beta_0$).
+Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data. To simulate data under this model, we simply construct our variable, $\mathbf{y}$, from the linear combination of predictors specified by the model, by supplying vectors of length $n$ for each of the quantities $\boldsymbol{\mu}$, $\mathbf{b}$, and $\mathbf{e}$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $\mathbf{b}$ and $\mathbf{e}$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\boldsymbol{\mu}$ = $\beta_0$).
 
 
 ```{r eval=T}
@@ -252,12 +252,14 @@ With our tree and trait data simulated, we can now fit the model:
 p.m.1 <- list(G = list(G1 = list(V = 1, nu = 0.002)), 
               R = list(V = 1, nu = 0.002))
 m.1 <- MCMCglmm(y ~ 1,
-                random = ~animal,
+                random   = ~animal,
                 pedigree = phy, 
-                family = c("gaussian"), 
-                data = d, 
-                prior = p.m.1,
-                nitt = 110000, burnin = 10000, thin = 100,
+                family   = c("gaussian"), 
+                data     = d, 
+                prior    = p.m.1,
+                nitt     = 110000, 
+                burnin   = 10000, 
+                thin     = 100,
                 pr = T, verbose = F
                 )
 
@@ -265,11 +267,12 @@ m.1 <- MCMCglmm(y ~ 1,
 ## BRMS
 p.b.1 <- set_prior("student_t(3, 0, 2.5)", class = c("sd","sigma","Intercept"), lb = c(0,0,NA))
 b.1 <- brm(y ~ 1 + (1|gr(animal, cov = C)), 
-           data = d,
-           prior = p.b.1,
+           data   = d,
+           prior  = p.b.1,
            family = gaussian(), 
-           data2 = list(C = C),
-           cores = 4, chains = 4
+           data2  = list(C = C),
+           cores  = 4, 
+           chains = 4
            )
 
 ```
@@ -325,13 +328,16 @@ As brms fits multiple MCMC chains by default, potential scale reduction factors,
 # variance component over multiple (4) MCMC chains
 m.1.2 <- mclapply(1:4, function(i) {
   MCMCglmm(y ~ 1,
-           random = ~animal,
+           random   = ~animal,
            pedigree = phy, 
-           family = c("gaussian"), 
-           data = d, 
-           prior = p.m.1,
-           nitt = 110000, burnin = 10000, thin = 100,
-           pr = T, verbose = F)
+           family   = c("gaussian"), 
+           data     = d, 
+           prior    = p.m.1,
+           nitt     = 110000,
+           burnin   = 10000, 
+           thin     = 100,
+           pr = T, verbose = F
+           )
 }, mc.cores=1)
 m.1.2 <- lapply(m.1.2, function(m) m$VCV)
 m.1.2 <- do.call(mcmc.list, m.1.2)
@@ -450,7 +456,7 @@ summary(mod)$param["lambda"]
 
 ## Model Explanation
 
-In a multi-response (MR) implementation, response variables are modelled jointly, allowing both phylogenetic and independent (co)variances to be estimated. A MR-PMM with two Gaussian response variables takes the form,
+For multi-response (MR) models, response variables are modelled jointly, allowing both phylogenetic and independent (co)variances to be estimated. A MR-PMM with two Gaussian response variables takes the form,
 
 \
 
@@ -479,7 +485,7 @@ where fixed effects are expressed as a linear combination of predictors,
 ```
 \
 
-With this design, the phylogenetic random effects must also be realised jointly as a multivariate normal, with variance given by $\Sigma^{\mathrm{phy}} \otimes C$, the Kronecker product of a trait-level correlation matrix $\Sigma^{\mathrm{phy}}$ and the phylogenetic VCV matrix, $C$. With $m$ traits (response variables) and $n$ taxa in the phylogeny, $\Sigma^{\mathrm{phy}} \otimes C$ is an $mn\times mn$ cross-covariance matrix containing phylogenetic (co)variances for all traits as well as between all traits. Thus, the phylogenetic random effects and independent residuals are drawn from multivariate normal distributions,
+With this design, the phylogenetic random effects are also realised jointly as a multivariate normal, with variance given by $\Sigma^{\mathrm{phy}} \otimes C$, the Kronecker product of a trait-level covariance matrix $\Sigma^{\mathrm{phy}}$ and the fixed phylogenetic covariance matrix, $C$. With $m$ traits (response variables), $\Sigma^{\mathrm{phy}}$ is m x m and specifies the phylogenetic variance in each trait (diagonals) as well as the phylogenetic covariance between traits (off-diagonals). With $n$ taxa in the phylogeny, $\Sigma^{\mathrm{phy}} \otimes C$ is an $mn\times mn$ cross-covariance matrix containing phylogenetic (co)variances for all traits as well as between all traits. Thus, the phylogenetic random effects and independent residuals are drawn from multivariate normal distributions,
 
 \
 
@@ -490,7 +496,7 @@ With this design, the phylogenetic random effects must also be realised jointly 
 \Sigma &=& \Sigma^{\mathrm{phy}} \otimes C + \Sigma^{\mathrm{ind}} \otimes I
 \end{eqnarray}\
 
-Notice that the two taxon-level variance structures we encountered in the univariate case above ($C$ and $I$) remain, but we must now also consider trait-level covariance operating at both the phylogenetic and independent level. This is achieved via the Kronecker operation $\otimes$ (see matrix expansions below). The phylogenetic trait-level VCV matrix $\Sigma^{\mathrm{phy}}$ is $m\times m$, where $m$ is the number of response traits in the model,
+Notice that the two taxon-level variance structures we encountered in the univariate case above ($C$ and $I$) remain, but we must now also consider trait-level covariance (i.e., the tendency for response traits to covary) operating at both the phylogenetic and independent level. This is achieved via the Kronecker operation $\otimes$ (see matrix expansions below). The phylogenetic trait-level VCV matrix $\Sigma^{\mathrm{phy}}$ is $m\times m$, where $m$ is the number of response traits in the model,
 
 \
 
@@ -650,9 +656,8 @@ m = 2
 u = c(0,0)
 
 # construct the phylogenetic trait-level covariance matrix, Sigma_phy
-# Sigma_phy is m x m and specifies the phylogenetic variance in each trait (diagonals) as well as the phylogenetic covariance between traits (off-diagonals). To construct Sigma_phy, we first define its (co)variance components:
-sig.b <- c(b11 = 1, b22 = 1) # sqrt of phylo variance for each trait; set to 1 so sigma = sigma^2
-cor.b.12 = 0.5 # phylo correlation coefficient between traits 1 and 2
+sig.b <- c(b11 = 1, b22 = 1) # sqrt of phylogenetic variance for each trait; set to 1 so sigma = sigma^2
+cor.b.12 = 0.5 # phylogenetic correlation between traits 1 and 2
 Bcor <- matrix(c(c(1,cor.b.12), c(cor.b.12,1)),m,m, byrow = T) # phylogenetic correlation matrix
 Sigma_phy <- matrix(kronecker(sig.b, sig.b),m,m)*Bcor # construct Sigma_phy as point-wise product
 
@@ -660,12 +665,12 @@ Sigma_phy <- matrix(kronecker(sig.b, sig.b),m,m)*Bcor # construct Sigma_phy as p
 
 # construct the independent trait-level covariance matrix, Sigma_ind
 sig.e <- c(e11 = 1, e22 = 1) # sqrt of independent variance for each trait
-cor.e.12 = 0.5 # independent correlation coefficient
+cor.e.12 = 0.5 # independent correlation
 Ecor <- matrix(c(c(1,cor.e.12),c(cor.e.12,1)),m,m, byrow = T)  # independent correlation matrix
 Sigma_ind <- matrix(kronecker(sig.e, sig.e),m,m)*Ecor # Construct Sigma_ind as point-wise product
 
 # simulate phylogenetic random effects
-# n = 1 in order to generate 1 random effect per taxon, mu = rep(0,n*m) centers random effects for all taxa on zero, Sigma = kronecker(Sigma_phy,C) defines the cross-covariance matrix of the random effects. In the kronecker, phylogenetic trait-level covariance is captured by Sigma_phy, taxon-level covariance is captured by C.
+# n = 1 in order to generate 1 random effect per taxon, mu = rep(0,n*m) centers random effects for all taxa on zero, Sigma = kronecker(Sigma_phy,C) defines the cross-covariance matrix of the random effects.
 b = mvrnorm(n = 1, mu = rep(0,n*m), Sigma = kronecker(Sigma_phy,C))
 # extract for each trait from the vector, b.
 b1 <- b[1:n] # effects 1:n relate to trait 1
@@ -701,28 +706,31 @@ A MR-PMM with two Gaussian response traits can be specified in MCMCglmm and brms
 p.m.2 <- list(G = list(G1 = list(V = diag(2), nu = 1.002)), 
               R = list(R1 = list(V = diag(2), nu = 1.002)))
 m.2 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
-                random = ~us(trait):animal,
-                rcov = ~us(trait):units,
+                random   = ~us(trait):animal,
+                rcov     = ~us(trait):units,
                 pedigree = phy,
-                family = c("gaussian","gaussian"), 
-                data = d2, 
-                prior = p.m.2, 
-                nitt=210000, burnin=10000, thin=200,
-                pr = TRUE, verbose = FALSE)
+                family   = c("gaussian","gaussian"), 
+                data     = d2, 
+                prior    = p.m.2, 
+                nitt     = 110000, 
+                burnin   = 10000, 
+                thin     = 100,
+                pr = T, verbose = F
+                )
 
 ## brms
 b.2.bf <- brmsformula(mvbind(y1, y2) ~ (1|b|gr(animal, cov = C))) + set_rescor(TRUE)
-
 p.b.2 <- set_prior(prior = rep(c("student_t(3, 0, 2.5)","student_t(3, 0, 2.5)", "student_t(3, 0.9, 2.5)"),2),
                    class = rep(c("sd","sigma","Intercept"),2), 
                    lb = rep(c(0,0,NA)), resp = rep(c("y1","y2"), each = 3))
 b.2 <- brm(b.2.bf,
-           data = d2,
-           prior = p.b.2,
+           data   = d2,
+           prior  = p.b.2,
            family = gaussian(), 
-           data2 = list(C = C),
-           cores = 2, chains = 2, iter = 3000, thin = 3)
-           cores = 2, chains = 2, iter = 300, thin = 3)
+           data2  = list(C = C),
+           cores  = 4, 
+           chains = 4
+           )
 
 ```
 
@@ -730,7 +738,7 @@ b.2 <- brm(b.2.bf,
 
 ## Model Syntax
 
-In MCMCglmm, we use `cbind()` to specify multiple response variables. The reserved term `trait` is used to specify fixed effects for all response variables. In our example, `trait-1` suppresses the global intercept, instead fitting separate intercepts for each trait $y1$ and $y2$. With multiple response variables, it is now possible to model covariance between responses at different levels in the model hierarchy. MCMCglmm offers several options for defining the structure of covariance matrices to be estimated (@hadfield2010; also see MCMCglmm course notes). The argument `~us(trait)` specifies an unstructured (all elements estimated) covariance matrix with dimension equal to the number of response traits considered (here 2 x 2). The suffix `:animal` specifies this covariance matrix is on the level of the grouping factor `animal`, where-as `:units` encodes an independent (residual) covariance matrix.
+In MCMCglmm, we use `cbind()` to specify multiple response variables. The reserved term `trait` is used to specify fixed effects for all response variables. In our example, `trait-1` suppresses the global intercept, instead fitting separate intercepts for each trait $y1$ and $y2$. With multiple response variables, it is now possible to model covariance between responses at different levels in the model hierarchy. MCMCglmm offers several options for defining the structure of covariance matrices to be estimated (@hadfield2010; also see MCMCglmm course notes). The argument `~us(trait)` specifies an unstructured (all elements estimated) covariance matrix with dimension equal to the number of response traits (here 2 x 2). The suffix `:animal` specifies this covariance matrix is on the level of the grouping factor `animal`, where-as `:units` encodes an independent (residual) covariance matrix.
 
 In brms, we use `mvbind()` to specify multiple response variables. An index (here `|b|`, but any unique identifier is accepted) is used within the random effect specification to instruct brms to estimate the correlation between $y1$ and $y2$ at the animal group level. If omitted, only the correlation between $y1$ and $y2$ on the independent level will be estimated.
 
@@ -738,22 +746,22 @@ In brms, we use `mvbind()` to specify multiple response variables. An index (her
 
 ## Inference
 
-### Partial Correlations
+### Correlations
 
-For MR cases, the parameters of greatest interest are the phylogenetic and independent (co)variance components, which are used to derive partial correlations by substituting relevant elements into,
+For MR cases, the parameters of greatest interest are typically the phylogenetic and independent (co)variance components, which are used to derive correlations by substituting relevant elements into,
 
 \begin{eqnarray} \label{eq_cor_PMM}
 \rho^{\cdots}_{12} = \frac{\Sigma^{\cdots}_{12}}{\sqrt{(\Sigma^{\cdots}_{11} \times \Sigma^{\cdots}_{22})}}
 \end{eqnarray}\
 
-Thus, posterior distributions of each pairwise partial correlation estimate are obtained by supplying vectors of posterior samples for each (co)variance parameter. These calculations are performed and reported by default in the brms model summary. For MCMCglmm, correlations can be calculated from (co)variance estimates with some basic manipulations
+Thus, posterior distributions of each pairwise correlation estimate are obtained by supplying vectors of posterior samples for each (co)variance parameter. These calculations are performed and reported by default in the brms model summary. For MCMCglmm, correlations can be calculated from (co)variance estimates with some basic manipulations:
 
 ```{r eval=FALSE}
 
 ## brms
-summary(b.2)
 # phylogenetic correlation = cor(y1_Intercept,y2_Intercept)
 # independent correlation = rescor(y1,y2)
+summary(b.2)
 
 ## MCMCglmm
 # phylogenetic correlation between y1 and y2
@@ -764,6 +772,16 @@ quantile(m.2$VCV[,"traity1:traity2.units"]/
      sqrt(m.2$VCV[,"traity1:traity1.units"]*m.2$VCV[,"traity2:traity2.units"]))
 
 ```
+
+\
+
+### Partial Correlations
+
+Due to the partitioning achieved in MR-PMM, the fitted covariance matrices $\Sigma^{\mathrm{phy}}$ and $\Sigma^{\mathrm{ind}}$ may be used to compute conditional dependencies (i.e., partial correlations) between traits on both the phylogenetic and independent level. These quantities describe the pairwise relationship between response traits after accounting for the effects of all other response traits specified in the model, and are thus analogous to the partial regression coefficients estimated in multiple regression. Partial correlations on the phylogenetic and independent level are derived by computing the matrix inverse (known as the precision matrix for covariance matrices) of $\Sigma^{\mathrm{phy}}$ and $\Sigma^{\mathrm{ind}}$, respectively. The off-diagonal elements of the resulting precision matrices are then used to compute partial correlations:
+
+TO BE CONTINUED...
+
+
 
 \
 
@@ -793,7 +811,7 @@ b.2 %>% as_tibble() %>%
 
 ## Model Explanation
 
-In previous simulations, we saw that Gaussian responses can be drawn directly from the multivariate structure, i.e., modeled via the identity link function. For non-Gaussian variables, (co)variances must be modeled on the link scale, e.g., for Poisson regression the mean is modeled with the log link while for binomial data, the probability of success is modeled with the logit link. To demonstrate this, we will again simulate and fit data under a bivariate model, this time taking a binomial response for $\mathbf{y_2}$.
+In previous simulations, we saw that Gaussian responses can be drawn directly from the multivariate structure, i.e., modeled via the identity link function. For non-Gaussian variables, (co)variances must be modeled on the link scale. For example, for Poisson regression the mean is modeled with the log link while for binomial data, the probability of success is modeled with the logit link. To demonstrate this, we will again simulate and fit data under a bivariate model, this time taking a binomial response for $\mathbf{y_2}$.
 
 \
 
@@ -834,7 +852,7 @@ d3$obs <- 1:nrow(d3)
 
 ## Model Specification
 
-Specification of this model changes very little for MCMCglmm; the second argument to `family` is simply specified as "threshold" (or alternatively, "categorical"). Prior specification requires more careful attention. For binomial variables, the residual variance is not identifiable. This is handled in MCMCglmm by fixing the residual variance of the binomial response to a nominal value (here, V = 1) in the prior specification. Fixing at higher values of V can improve mixing of the chain, but may also lead to numerical problems (see MCMCglmm course notes). Importantly, it is still possible to estimate residual correlations between traits even when the residual variance is fixed (i.e., fixing the width of the error variance for our traits does not prevent correlation between joint multivariate draws), hence we still specify `rcov = ~us(trait):units` in the code below (also see `~corg()` in MCMCglmm course notes). We also implement parameter expanded priors for the random effects, which are recommended for "threshold" models (for details see @de2018quantitative and associated tutorial).
+Specification of this model changes very little for MCMCglmm; the second argument to `family` is simply specified as "categorical" (or alternatively, "threshold"; see MCMCglmm course notes). Prior specification requires more careful attention. For binomial variables, the residual variance is not identifiable. This is handled in MCMCglmm by fixing the residual variance of the binomial response to a nominal value (here, V = 1) in the prior specification [@hadfield2010]. Fixing at higher values of V can improve mixing of the chain, but may also lead to numerical problems. Importantly, it is still possible to estimate residual correlations between traits even when the residual variance is fixed (i.e., fixing the width of the error variance for our traits does not prevent correlation between joint multivariate draws), hence we still specify `rcov = ~us(trait):units` in the code below (also see `~corg()` in MCMCglmm course notes). We also implement parameter expanded priors for the random effects, which are recommended for "threshold" models (for details see @de2018quantitative and associated tutorial).
 
 For brms, it is useful to specify separate formulae for each response variable when considering different error families. Unlike MCMCglmm, brms does not model additive overdispersion by default for non-gaussian traits. Thus, in order to model independent (co)variances, it is necessary to specify an additive overdispersion term in the form of an observation level random effect, `(1|e|obs)`. However, this introduces an identifiability issue for the Gaussian error term, which cannot be silenced with default brms coding. Here, for simplicity, we have just constrained the Gaussian error term to be small (`sigma = 0.1`). A more appropriate (albeit technically demanding) solution is to edit the underlying stan code to prevent estimation of the redundant Gaussian error term.
 
@@ -844,31 +862,34 @@ For brms, it is useful to specify separate formulae for each response variable w
 p3 <- list(G = list(G1 = list(V = diag(2), nu = 2, alpha.mu = rep(0,2), alpha.V = diag(2))), # parameter expanded prior for random effects of threshold response
            R = list(R1 = list(V = diag(2), nu = 2, fix = 2)))
 m.3 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
-                random = ~us(trait):animal,
-                rcov = ~us(trait):units,
+                random   = ~us(trait):animal,
+                rcov     = ~us(trait):units,
                 pedigree = phy,
-                family = c("gaussian", "threshold"), 
-                data = d3, 
-                prior = p3, 
-                nitt=210000, burnin=10000, thin=200,
-                pr=TRUE,verbose = FALSE)
+                family   = c("gaussian", "categorical"), 
+                data     = d3, 
+                prior    = p3, 
+                nitt     = 110000, 
+                burnin   = 10000, 
+                thin     = 100,
+                pr=T, verbose = F
+                )
 
 # brms
 bf_y1 <- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
 bf_y2 <- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
-
 p.b.3 <- prior(student_t(3, 0, 2.5), class = "Intercept", resp = "y1", lb = NA) +
   prior(student_t(3, 0, 2.5), class = "Intercept", resp = "y2", lb = NA) +
   prior(student_t(3, 0, 2.5), class = "sd", resp = "y1", lb = 0) +
   prior(student_t(3, 0, 2.5), class = "sd", resp = "y2", lb = 0) +
   prior(constant(1), class = "sd", resp = "y2", group = "obs", lb = 0)
 b.3 <- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
-          data = d3, 
+          data   = d3, 
           family = gaussian(), 
-          data2 = list(C = C),
-          prior = p.b.3,
-          cores = 2, chains = 2, iter = 3000, thin = 3
-)
+          data2  = list(C = C),
+          prior  = p.b.3,
+          cores  = 4, 
+          chains = 4
+          )
 
 ```
 
@@ -876,24 +897,25 @@ b.3 <- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
 
 ## Inference
 
-### Partial Correlations
+### Correlations
 
-For MR models including non-Gaussian traits, the calculation of partial correlations between traits is unchanged so long as calculations are performed on the link scale (see Box 1 in manuscript).
+For MR models including non-Gaussian traits, the calculation of correlations between traits on the phylogenetic and independent level is unchanged so long as calculations are performed on the link scale (see Box 1 in manuscript).
 
 ### Phylogenetic Signal
 
-An important consequence of fixing the residual variance for our Bernoulli trait $\mathbf{y_2}$ is that $h^2$ is no longer an appropriate method for estimating phylogenetic signal. Specifically, for a Bernoulli trait, the amount of variation explained by shared ancestry is estimated as
+An important consequence of fixing the residual variance for our Bernoulli trait $\mathbf{y_2}$ is that $h^2$ is no longer an appropriate method for estimating phylogenetic signal. Specifically, for a binomial trait, the amount of variation explained by shared ancestry is estimated as
 
 ```{=tex}
 \begin{eqnarray}
 h^2_{\mathrm{logit}} = \Sigma^{\mathrm{phy}}_{22}/(\Sigma^{\mathrm{phy}}_{22}+V+\pi^2/3)
 \end{eqnarray}
 ```
-where $V$ is the level of residual variance (additive over-dispersion) fixed in the prior specification (here, V = 1) and $\pi^2/3$ is the distribution specific variance term for the binomial distribution with logistic link [see @nakagawa2013general for details].
+
+where $V$ is the level of residual variance (additive over-dispersion) fixed in the prior specification (here, V = 1) and $\pi^2/3$ is the distribution specific variance term for the binomial distribution with logit link [see @nakagawa2013general for details].
 
 ```{r eval=FALSE}
 # MCMCglmm
-(m.3$VCV[, "traity2:traity2.animal"]/(m.3$VCV[, "traity2:traity2.animal"] + 1 + pi^2/3)) %>%
+(m.3$VCV[, "traity2.1:traity2.1.animal"]/(m.3$VCV[, "traity2.1:traity2.1.animal"] + 1 + pi^2/3)) %>%
   quantile(probs=c(0.025,0.5,0.975))
 
 # BRMS
@@ -937,14 +959,15 @@ For model fitting, we have set `max_treedepth = 12` based on warning messages is
 bf_y1 <- brmsformula(log_SLA | resp_se(se_log_SLA, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
 bf_y2 <- brmsformula(N | resp_se(se_N, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
 bf_y3 <- brmsformula(d13C | resp_se(se_d13C, sigma = TRUE) ~ 1 + (1|b|gr(animal, cov = C))) 
-
 b.euc <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
-            data = euc_data, 
-            family = gaussian(), 
-            data2 = list(C = C),
-            control=list(adapt_delta = 0.85, max_treedepth = 12),
+            data      = euc_data, 
+            family    = gaussian(), 
+            data2     = list(C = C),
+            control   = list(adapt_delta = 0.85, max_treedepth = 12),
             save_pars = save_pars(all = TRUE),
-            cores = 2, chains = 2, iter = 6000, thin = 3)
+            cores     = 4, 
+            chains    = 4
+            )
 
 ```
 
@@ -968,10 +991,7 @@ pars <- b.euc %>% as_tibble %>% select(-starts_with(c("r_","z_","L_","Lres","lp"
 # names of random effects
 r_pars <- b.euc %>% as_tibble %>% select(starts_with("r_")) %>% names
 
-#------------------------
 # convergence diagnostics
-#------------------------
-
 mcmc_trace(b.euc, pars = pars)
 mcmc_rhat(rhat(b.euc, pars = r_pars))
 mcmc_neff(neff_ratio(b.euc, pars = r_pars))
@@ -1058,7 +1078,7 @@ ggarrange(ppM1 + labs(subtitle = paste0("Coverage: ", covM1[1], "% at 90th quant
 
 \
 
-For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable proportion of the data, necessitating manual re-fits of the model. The computational demand of re-fitting such a large model for more than few troublesome test data points is probably not feasible for the average desktop workstation. However, as HPC becomes more accessible to the average researcher, manual re-fitting procedures may represent a viable option to LOO-CV of MR-PMM.
+For LOO-CV, we find the approximate method [@burkner2021] fails for a reasonable proportion of the data, necessitating manual re-fits of the model. The computational demand of re-fitting such a large model for more than a few troublesome test data points is probably not feasible for the average desktop workstation. However, as HPC becomes more accessible to the average researcher, manual re-fitting procedures may represent a viable option to LOO-CV of MR-PMM.
 
 ```{r, eval = F, warning = F}
 
@@ -1151,9 +1171,9 @@ b.euc %>% as_tibble() %>%
 
 ```
 
-### Partial Correlations
+### Correlations
 
-Our second aim was to assess partial correlations between response traits. These are reported in the model summary and summarized in the figure below.
+Our second aim was to assess correlations between response traits on the phylogenetic and independent level. Posterior means of parameter estimates (rho^{\mathrm{{phy}}}_{ij} and rho^{\mathrm{{ind}}}_{ij}) are reported in the model summary and visualised as 5-point summaries in the figure below.
 
 ``` {r, eval = T, warning = F}
 b.euc
