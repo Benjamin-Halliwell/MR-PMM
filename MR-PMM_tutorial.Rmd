@@ -13,6 +13,8 @@ output:
     toc_float:
       collapsed: false
       smooth_scroll: false
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -22,6 +24,7 @@ knitr::opts_chunk$set(echo = TRUE, dev="png", dpi=96)
 library(rstan);library(brms);library(dplyr);library(tidyverse);library(tidybayes)
 library(ggplot2);library(ggpubr);library(knitr);library(MCMCglmm);library(bayesplot)
 library(geiger);library(ape);library(phytools);library(caper);library(parallel);library(coda)
+library(ggtree)
 
 m.1 <- readRDS("m.1.rds");b.1 <- readRDS("b.1.rds")
 m.2 <- readRDS("m.2.rds");b.2 <- readRDS("b.2.rds")
@@ -70,7 +73,7 @@ For the case of a single Gaussian trait, our response variable, $\mathbf{y}$, is
 
 \
 
-where $\mu$ represents,
+where $\boldsymbol{\mu}$ represents,
 
 \
 
@@ -81,7 +84,7 @@ where $\mu$ represents,
 ```
 \
 
-In order to capture the expected influence of co-ancestry on $y$, (similar values among closely related taxa), the distribution of our random effect, $b$, is multivariate normal, with mean 0 and (co)variance given by $\sigma_{b}C$,
+In order to capture the expected influence of co-ancestry on $\mathbf{y}$, (similar values among closely related taxa), the distribution of our random effect, $\mathbf{b}$, is multivariate normal, with mean 0 and (co)variance given by $\sigma^2_{b}C$,
 
 \
 
@@ -93,7 +96,7 @@ In order to capture the expected influence of co-ancestry on $y$, (similar value
 
 <!-- phylogenetic VCV matrix, where $n$ is the number of taxa in the tree. This model therefore takes as input a phylogenetic tree (topology and branch lengths), which is assumed to be known without error. The $A$ matrix itself is derived by taking the inverse of the distance matrix of the tree. It gives the expected (co)variance among taxa in the value of $y$ assuming some model of evolution (e.g. BM) along the branches of that tree. -->
 
-Here, $C$ is a fixed $n\times n$ phylogenetic VCV matrix, where $n$ is the number of taxa in the tree, and $\sigma_{b}$, the phylogenetic variance, is a scalar to be estimated by the model. This model therefore takes as input a phylogeny (topology and branch lengths), which is assumed to be known without error. The $C$ matrix is derived from the similarity matrix of the phylogeny. This gives the expected (co)variance among taxa in $y$ assuming BM evolution.
+Here, $C$ is a fixed $n\times n$ phylogenetic covariance matrix, where $n$ is the number of taxa in the tree, and $\sigma^2_{b}$, the phylogenetic variance, is a scalar to be estimated by the model. This model therefore takes as input a phylogeny (topology and branch lengths), which is assumed to be known without error. The $C$ matrix is derived from the similarity matrix of the phylogeny. This gives the expected (co)variance among taxa in $\mathbf{y}$ assuming Brownian motion evolution [@symonds2014primer].
 
 \
 
@@ -106,7 +109,7 @@ C &=&
 \end{pmatrix}
 \end{eqnarray}\
 
-In contrast, the identity matrix $I$ (an $n\times n$ matrix with 1 in all diagonal elements and 0 in all off-diagonal elements) encodes independent residual error associated with each observation (taxon) in the distributional statement for the errors:
+In contrast, the identity matrix $I$ (an $n\times n$ matrix with 1 in all diagonal elements and 0 in all off-diagonal elements) encodes independent residual error associated with each observation (here, each taxon) in the distributional statement for the errors:
 
 \
 
@@ -180,7 +183,7 @@ I &=&
 
 ## Data Simulation
 
-Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data. To simulate data under this model, we simply construct our variable, $y$, from the linear combination of predictors specified by the model, by supplying vectors of length $n$ for each of the quantities $\mu$, $b$, and $e$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $b$ and $e$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\mu$ = $\beta_0$).
+Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data. To simulate data under this model, we simply construct our variable, $\mathbf{y}$, from the linear combination of predictors specified by the model, by supplying vectors of length $n$ for each of the quantities $\boldsymbol{\mu}$, $\mathbf{b}$, and $\mathbf{e}$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $\mathbf{b}$ and $\mathbf{e}$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model ($\mathbf{\mu}$ = $\beta_0$).
 
 
 ```{r eval=T}
@@ -191,7 +194,7 @@ Implementing these models in R is fairly straight forward in both MCMCglmm and b
 n = 250 # number of species
 phy <- geiger::sim.bdtree(b=1, d=0, stop="taxa", n=n, extinct=FALSE)
 
-# create VCV matrix from tree, scale to correlation matrix with corr = T
+# create covariance matrix from tree, scale to correlation matrix with corr = T
 C = ape::vcv.phylo(phy, corr = T)
 
 # identity matrix
@@ -204,7 +207,7 @@ u = 0
 sigma_b = 1
 
 # residual variance
-sigma_e = 1
+sigma_e = 0.1
 
 # simulate phylogenetic random effects as one draw from a MVN
 b = MASS::mvrnorm(1,rep(0,n),sigma_b*C)
@@ -221,12 +224,17 @@ d <- data.frame(animal,y)
 
 ```
 
+
 We can plot our simulated data against the tree for a visual assessment of phylogenetic structure in the distribution of trait values
 
 ```{r, eval=T}
-
-y <- as.matrix(d$y);rownames(y) <- d$animal
-plotTree.barplot(phy,y,args.plotTree=list(ftype="off"))
+# convert to tibble and define 'id' column to associate data and tree in geom_facet
+y_bar <- tibble(id = d$animal, bar_val = d$y)
+# plot
+ggtree(phy) + 
+  geom_facet(panel = "trait", data = y_bar, geom = geom_col, 
+             aes(x = bar_val), orientation = 'y', width = 1) + 
+  theme(strip.background = element_blank(),strip.text = element_blank())
 
 ```
 
@@ -249,18 +257,20 @@ m.1 <- MCMCglmm(y ~ 1,
                 family = c("gaussian"), 
                 data = d, 
                 prior = p.m.1,
-                nitt = 210000, burnin = 10000, thin = 200,
-                pr = TRUE, verbose = F)
+                nitt = 110000, burnin = 10000, thin = 100,
+                pr = T, verbose = F
+                )
 
 
 ## BRMS
 p.b.1 <- set_prior("student_t(3, 0, 2.5)", class = c("sd","sigma","Intercept"), lb = c(0,0,NA))
 b.1 <- brm(y ~ 1 + (1|gr(animal, cov = C)), 
-            data = d,
-            prior = p.b.1,
-            family = gaussian(), 
-            data2 = list(C = C),
-            cores = 2, chains = 2, iter = 3000, thin = 3)
+           data = d,
+           prior = p.b.1,
+           family = gaussian(), 
+           data2 = list(C = C),
+           cores = 4, chains = 4
+           )
 
 ```
 
@@ -272,7 +282,7 @@ The code above fits the same model in MCMCglmm and brms. In MCMCglmm, `animal` i
 
 In brms, the phylogenetic random effect can be encoded in the style of lme4 `(1|gr(animal, cov = C))`, where `(1|x)` specifies random intercepts and `gr(animal, cov = C)` encodes the phylogenetic group structure.
 
-It is not necessary to specify a prior to fit this model in either MCMCglmm or brms because sensible defaults are used automatically. However, we choose to explicitly specify (current default) priors to ensure repeatability, should the defaults change in the future. A key difference between these packages is the implemented Monte Carlo sampling method and the subsequent choice of priors. MCMCglmm is based on Gibbs sampling, which requires conjugate prior distributions to reduce sampling time through analytic computations. brms uses Hamiltonian Monte Carlo sampling which is an efficient hybrid of optimisation and sampling approaches that places no restrictions on the choice of prior.
+It is not necessary to specify a prior to fit this model in either MCMCglmm or brms because sensible defaults are used automatically. However, we choose to explicitly specify (current default) priors to ensure repeatability, should the defaults change in the future. A key difference between these packages is the Monte Carlo sampling method implemented and the subsequent choice of priors. MCMCglmm is based on Gibbs sampling, which utilises conjugate prior distributions to reduce sampling time through analytic computations. brms uses Hamiltonian Monte Carlo sampling which is an efficient hybrid of optimisation and sampling approaches that places no restrictions on the choice of prior.
 
 \
 
@@ -286,7 +296,6 @@ Basic convergence diagnostics are easily obtained for each package. As a first s
 plot(m.1$VCV)
 plot(b.1)
 
-
 ```
 
 Another standard indicator of sampling adequacy is the effective sample size (ESS) of each parameter estimate. In the presence of auto-correlation between MCMC samples, the ESS will be reduced relative to the thinned sample number, with low ESS indicating poor sampling. ESS is reported in the model summary for both MCMCglmm and brms.
@@ -299,37 +308,44 @@ b.1
 
 ```
 
-We can also check the auto-correlation in MCMC draws generated by the Gibbs sampler in MCMCglmm. This is generally not necessary for models fit in brms, as the Hamiltonian sampler ensures minimal auto-correlation between samples.
+We can also check the autocorrelation in MCMC draws generated by the Gibbs sampler in MCMCglmm. Ideally, we want to see values close to 0 for all rows below "Lag 0", which would signify negligible autocorreation at the thinning interval chosen during model fit [@de2018quantitative]. These diagnostics are generally not necessary for models fit in brms, as the Hamiltonian sampler ensures minimal autocorrelation between samples.
 
 ```{r, eval = F}
 
-# calculate autocorrelation in MCMC draws (generally unnecessary for brms due to Hamiltonian sampler)
+# calculate autocorrelation in MCMC draws
 autocorr(m.1$VCV)
 
 ```
 
-For a quantitative assessment of chain convergence, brms reports $\widehat{R}$ statistics, or potential scale reduction factors, by default for each parameter in the model summary, where $\widehat{R}$ $\\<$ 1.05 indicates adequate convergence [@gelman2013BDA]. For MCMCglmm, $\widehat{R}$ can be calculated from multiple MCMC chains of the same model using the `Rhat` function from rstan.
+As brms fits multiple MCMC chains by default, potential scale reduction factors, $\widehat{R}$, are reported in the model summary for a quantitative assessment of convergence for each parameter. As a rule of thumb, $\widehat{R}$ $\\<$ 1.05 indicate adequate convergence [@gelman2013BDA]. For MCMCglmm, $\widehat{R}$ can be calculated from multiple MCMC chains of the same model using the `Rhat` function from rstan.
 
 ```{r, eval = F}
 
 # calculate potential scale reduction factors for each 
-# variance component over multiple MCMC chains
-m.1.2 <- mclapply(1:2, function(i) {
+# variance component over multiple (4) MCMC chains
+m.1.2 <- mclapply(1:4, function(i) {
   MCMCglmm(y ~ 1,
            random = ~animal,
            pedigree = phy, 
            family = c("gaussian"), 
            data = d, 
            prior = p.m.1,
-           nitt = 350000, burnin = 50000, thin = 300,
-           pr = TRUE, verbose = FALSE)
+           nitt = 110000, burnin = 10000, thin = 100,
+           pr = T, verbose = F)
 }, mc.cores=1)
-
 m.1.2 <- lapply(m.1.2, function(m) m$VCV)
 m.1.2 <- do.call(mcmc.list, m.1.2)
-m.1.2 %>% as.matrix %>% Rhat
-
 plot(m.1.2)
+
+# units
+units <- lapply(m.1.2, "[", , "units")
+units <-  tibble("c1" = units[[1]],"c2" = units[[2]],"c3" = units[[3]],"c4" = units[[4]])
+units %>% as.matrix %>% Rhat
+# animal
+animal <- lapply(m.1.2, "[", , "animal")
+animal <-  tibble("c1" = animal[[1]],"c2" = animal[[2]],"c3" = animal[[3]],"c4" = animal[[4]])
+animal %>% as.matrix %>% Rhat
+
 
 ```
 
@@ -347,15 +363,15 @@ b.1 %>% pp_check(ndraws = 100)
 
 ```
 
-For MCMCglmm, posterior predictive checks are also obtained fairly easily (see MCMCglmm course notes)
+For MCMCglmm, posterior predictive checks are also obtained fairly easily (see [@hadfield2010] and MCMCglmm course notes).
 
 ```{r, eval = F}
 
 # posterior predictive checks
 rep <- 100
-pred <- matrix(nrow = rep, ncol = 250)
+pred <- matrix(nrow = rep, ncol = n) # ncol = number of taxa
 for (i in 1:rep) {
-pred[i,] <- rnorm(250, (m.1$X %*% m.1$Sol[i,])@x, sqrt(sum(m.1$VCV[i,])))
+pred[i,] <- rnorm(n, (m.1$X %*% m.1$Sol[i,])@x, sqrt(sum(m.1$VCV[i,])))
 }
 obs <- d$y
 pp_check(obs, pred, ppc_dens_overlay)
@@ -369,7 +385,7 @@ However, an even more rigorous and sophisticated approach to model validation of
 
 ## Inference
 
-Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based upon summary statistics of the posterior distributions of the model parameters. For example, hypothesis tests can be performed by evaluating whether a CI (e.g. 95%) of the posterior of a parameter crosses zero. This is easily evaluated from the model summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify standard deviations, we will re-scale estimates from MCMCglmm by calculating posterior means from the `sqrt` of MCMC samples.
+Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based upon summary statistics of the posterior distributions of the model parameters. For example, hypothesis tests can be performed by evaluating whether a credible interval (e.g. 95%) of the posterior of a parameter crosses zero. This is easily evaluated from the model summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify variances, we will re-scale estimates from brms by calculating quantiles from the square of MCMC samples.
 
 ```{r, eval = F}
 # summary
@@ -381,12 +397,14 @@ summary(m.1)$solutions
 summary(b.1)[["fixed"]]
 
 # phylogenetic variance (sigma_b)
-m.1$VCV[,"animal"] %>% sqrt %>% quantile(probs = c(0.025,0.5,0.975))
-summary(b.1)[["random"]]
+m.1$VCV[,"animal"] %>% quantile(probs=c(0.025,0.5,0.975))
+b.1 %>% as_tibble() %>% 
+  pull(sd_animal__Intercept) %>% .^2 %>% as.mcmc %>% quantile(probs=c(0.025,0.5,0.975))
 
 # residual variance (sigma_e)
-m.1$VCV[,"units"] %>% sqrt %>% quantile(probs = c(0.025,0.5,0.975))
-summary(b.1)[["spec_pars"]]
+m.1$VCV[,"units"] %>% quantile(probs=c(0.025,0.5,0.975))
+b.1 %>% as_tibble() %>% 
+  pull(sigma) %>% .^2 %>% as.mcmc %>% quantile(probs=c(0.025,0.5,0.975))
 
 ```
 
