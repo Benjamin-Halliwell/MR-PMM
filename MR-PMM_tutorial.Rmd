@@ -3,6 +3,7 @@ title: "Multi-Response Phylogenetic Mixed Models"
 author: "Ben Halliwell & Luke Yates"
 header-includes:
   - \usepackage{mathtools}
+  - \usepackage{multirow}
 date: "2023"
 bibliography: bib_MR-PMM.bib
 link-citations: true
@@ -815,7 +816,7 @@ In previous simulations, we saw that Gaussian responses can be drawn directly fr
 
 \
 
-```{=tex}
+
 \begin{eqnarray}
 \begin{pmatrix}\mathbf{y_1} \\ \mathrm{logit}(\mathbf{p_2}) \end{pmatrix} &=& 
 \begin{pmatrix}\boldsymbol{\mu}_1 + \mathbf{b}_1 + \mathbf{e}_1 \\
@@ -826,7 +827,7 @@ In previous simulations, we saw that Gaussian responses can be drawn directly fr
 \mathbf{y_2} &\sim& \mathrm{binomial}(\mathbf{p_2})
 
 \end{eqnarray}
-```
+
 \
 
 ## Data Simulation
@@ -854,7 +855,7 @@ d3$obs <- 1:nrow(d3)
 
 Specification of this model changes very little for MCMCglmm; the second argument to `family` is simply specified as "categorical" (or alternatively, "threshold"; see MCMCglmm course notes). Prior specification requires more careful attention. For binomial variables, the residual variance is not identifiable. This is handled in MCMCglmm by fixing the residual variance of the binomial response to a nominal value (here, V = 1) in the prior specification [@hadfield2010]. Fixing at higher values of V can improve mixing of the chain, but may also lead to numerical problems. Importantly, it is still possible to estimate residual correlations between traits even when the residual variance is fixed (i.e., fixing the width of the error variance for our traits does not prevent correlation between joint multivariate draws), hence we still specify `rcov = ~us(trait):units` in the code below (also see `~corg()` in MCMCglmm course notes). We also implement parameter expanded priors for the random effects, which are recommended for "threshold" models (for details see @de2018quantitative and associated tutorial).
 
-For brms, it is useful to specify separate formulae for each response variable when considering different error families. Unlike MCMCglmm, brms does not model additive overdispersion by default for non-gaussian traits. Thus, in order to model independent (co)variances, it is necessary to specify an additive overdispersion term in the form of an observation level random effect, `(1|e|obs)`. However, this introduces an identifiability issue for the Gaussian error term, which cannot be silenced with default brms coding. Here, for simplicity, we have just constrained the Gaussian error term to be small (`sigma = 0.1`). A more appropriate (albeit technically demanding) solution is to edit the underlying stan code to prevent estimation of the redundant Gaussian error term.
+For brms, it is useful to specify separate formulae for each response variable when considering different error families. Unlike MCMCglmm, brms does not model additive overdispersion by default for non-gaussian traits. Thus, in order to model independent (co)variances, it is necessary to specify an additive overdispersion term in the form of an observation level random effect, `(1|e|obs)`. However, this introduces an identifiability issue for the Gaussian error term, which cannot be silenced with default brms coding. Here, for simplicity, we have just constrained the Gaussian error term to be small (`sigma = 0.1`). A more appropriate (albeit technically demanding) solution is to edit the underlying stan code to prevent estimation of the redundant Gaussian error term (see below).
 
 ```{r eval=FALSE}
 
@@ -905,11 +906,11 @@ For MR models including non-Gaussian traits, the calculation of correlations bet
 
 An important consequence of fixing the residual variance for our Bernoulli trait $\mathbf{y_2}$ is that $h^2$ is no longer an appropriate method for estimating phylogenetic signal. Specifically, for a binomial trait, the amount of variation explained by shared ancestry is estimated as
 
-```{=tex}
+
 \begin{eqnarray}
 h^2_{\mathrm{logit}} = \Sigma^{\mathrm{phy}}_{22}/(\Sigma^{\mathrm{phy}}_{22}+V+\pi^2/3)
 \end{eqnarray}
-```
+
 
 where $V$ is the level of residual variance (additive over-dispersion) fixed in the prior specification (here, V = 1) and $\pi^2/3$ is the distribution specific variance term for the binomial distribution with logit link [see @nakagawa2013general for details].
 
@@ -929,6 +930,62 @@ b.3 %>% as_tibble() %>%
 \
 
 N.B. Even when dealing exclusively with Gaussian traits, adjustments to the calculation of $h^2$ are sometimes necessary. For example, when fixed effect predictors feature in the model, the variance explained by the fixed effects must be included in the denominator of the $h^2$ calculation [@de2016general].
+
+\
+
+## Customizing models further using Stan
+
+For `brms`, models are specified using familiar `lme4` style R syntax, while estimation is carried out using Stan programs that are automatically constructed and compiled by the call to `brm()` prior to fitting. Thus, `brms` provides a user-friendly interface for exploiting the computational advantages of Stan, at the expense of imposing limitations on model specification. Thankfully, such limitations can often be overcome by encoding the mode directly in Stan. The Stan code underlying our fitted model is stored within the model object, which provides a convenient starting point for any alternations we would like to make.
+
+```{r}
+
+b.3$model
+
+```
+
+One such limitation arises in the specification of multi-response models containing Gaussian and non-Gaussian response variables when only a single value per species per trait is available (i.e., the data represent species mean trait values). Specifically, the additive overdispersion and observation-level (i.e., residual) variance components for the Gaussian response are not identifiable, because species and observation identities coincide. Furthermore, the Gaussian error term cannot be silenced within `brms` functions, requiring the user to fix the error to a small nominal value (e.g., `sigma = 0.1`) to restore model identifiability. By editing the Stan code directly, it is possible to silence this extraneous parameter. Specifically, we seek to fit the model,
+
+
+\begin{eqnarray}
+
+\begin{pmatrix}\mathbf{y_1} \\ \boldsymbol{\mu_2} \end{pmatrix}
+&\sim& N
+\begin{pmatrix}\boldsymbol{\mu}_1 + \mathbf{b}_1 & \multirow{2}{*}{, $\Sigma^e \otimes I$} \\
+               \boldsymbol{\mu}_2 + \mathbf{b}_2 \\
+\end{pmatrix}\\
+\\
+\begin{pmatrix}\mathbf{b_1} \\ \boldsymbol{b_2} \end{pmatrix} 
+&\sim& N(0, \Sigma^b \otimes C) \\
+\\
+\mathbf{y_2} &\sim& \mathrm{bernoulli}(\eta, \mu_2)
+
+\end{eqnarray}
+
+
+which is achieved by making the following amendments to the Stan code
+
+TO BE CONTINUED...
+
+
+```{r, eval=F}
+
+## TO DO
+new_model
+
+```
+
+
+By revising the distributional statements for our observations, this approach also reduces the number of parameters to be estimated by the model (from X to Y), which reduces run time.
+
+
+```{r, eval=F}
+
+get_elapsed_time(new_model)
+
+```
+
+
+
 
 \
 
@@ -1186,16 +1243,19 @@ b.euc$fit %>%
                rescor__logSLA__d13C,
                rescor__N__d13C) %>%
   median_hdi(.width = c(0.95, 0.5)) %>% 
-  mutate(cor = rep(rep(c("SLA ~ d13C","SLA ~ N_mass","N_mass ~ d13C"),2),2)) %>% 
-  mutate(level = rep(rep(c("phy","ind"),each=3),2)) %>%
+  mutate(cor = rep(rep(c("N_mass ~ d13C","SLA ~ N_mass","SLA ~ d13C"),2),2)) %>% 
+  mutate(level = rep(rep(c("phylogenetic","non-phylogenetic"),each=3),2)) %>%
   ggplot(aes(y = cor, x = .value, xmin = .lower, xmax = .upper, col = level)) +
-  geom_pointinterval(position = position_dodge(width = 0.25)) +
+  geom_pointinterval(position = position_dodge(width = 0.25),
+                     interval_size_range = c(0.9, 2.1),
+                     fatten_point = 1.8,) +
   geom_vline(xintercept = 0, col = "grey70", lty = "longdash") +
   theme_classic() + 
-  theme(axis.text = element_text(size = 12),
+  theme(axis.text = element_text(size = 13),
         axis.title = element_text(size = 14),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14)) +
+        legend.text = element_text(size = 13),
+        legend.title = element_text(size = 14),
+        legend.key.size = unit(2, 'line')) +
   xlab("correlation estimate") + ylab("") + xlim(-1,1) +
   scale_color_manual(values = c("red", "#0072B2")) + 
   scale_y_discrete(labels=c("SLA ~ N_mass" = bquote(SLA~"~"~N[mass]),
