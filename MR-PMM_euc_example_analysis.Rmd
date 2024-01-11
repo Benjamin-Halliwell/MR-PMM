@@ -2,12 +2,18 @@
 title: "MR-PMM Eucalyptus Example Analysis"
 author: "Ben Halliwell"
 date: "2023-11-27"
-output: html_document
+output: 
+  html_document:
+    number_sections: false
+    toc: true 
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
 editor_options: 
   chunk_output_type: console
 ---
 
-### Introduction
+# Introduction
 
 In this tutorial we will use the AusTraits database to explore the benefits of multi-response phylogenetic mixed models (MR-PMM). AusTraits is a relational database containing records of ~500 plant traits across ~30,000 Australian plant taxa (https://austraits.org/). The first step is to install and load any required packages, then load in the AusTraits data. For reproducibility, all analyses will use version 4.2.0 of AusTraits (https://zenodo.org/records/8353840).
 
@@ -51,7 +57,7 @@ fit_meta <- readRDS(file = "fit_meta.rds")
 ```
 
 
-### Data cleaning and manipulation
+# Data cleaning and manipulation
 
 A crucial step in any phylogenetic comparative analysis is collating, cleaning and manipulating data records. As we are dealing with a phylogeny, this includes matching the nomenclature (species naming conventions) between our trait data and the tip labels of the phylogenetic tree. The following section covers the decisions made and operations applied to arrive at the final data set for statistical analyses. As we are working from AusTraits, the first step is to pull down data on the organisms we are interested in, which for today is the genus Eucalyptus.
 
@@ -116,7 +122,7 @@ euc_data <- euc_data %>%
 
 \
 
-### Phylogeny
+## Phylogeny
 
 After our initial refinement of records to include, the next step is to match the nomenclature (species naming conventions) between our trait data and the tip labels of our phylogenetic tree. We will use the maximum likelihood Eucalypt phylogeny presented by Thornhill et al. (2019) for all our analyses (N.B. models are easily extended to incorporate phylogenetic uncertainty by fitting over a sample of candidate trees and combining posterior estimates prior to inference). To proceed with analyses, our tree must be binary (fully bifurcating with no polytomies) and ultrametric (clock-like with all tips right adjusted). So the first step is to perform these checks and amend the tree where necessary.
 
@@ -140,7 +146,7 @@ is.binary(phy);is.ultrametric(phy) # now passes checks
 
 \
 
-### Nomenclature 
+## Nomenclature 
 
 Now the tree is in the right shape we can go about cleaning and matching the nomenclature. A quick preview of taxon names reveals a few differences between our data and the tip labels of our tree. We can usually resolve most differences simply by amending text strings using `grep` functions. We will create two versions of the taxon name; one which retains subspecies identity and one which does not. In the event that some subspecies do not appear in the tree, using the latter nomenclature may allow us to include more records by treating trait data from all subspecies as observations at the species level (e.g., records for subspecies Eucalyptus_examplus_primus and Eucalyptus_examplus_secundis are treated as records for species Eucalyptus_examplus). As taxonomy is in a constant state of revision, it is also a good idea to check whether any species have undergone recent name changes which may create conflicts when attempting to match trait data records to taxon names in the phylogeny, though we will skip this step for today's exercise.
 
@@ -325,7 +331,7 @@ dat_mean %>% select(-phylo) %>%  head() # single row containing species mean tra
 
 \
 
-### Plotting
+# Plotting
 
 We are finally ready to start playing with the data! First, let's make a few plots to get a feel for things.
 
@@ -381,7 +387,7 @@ gheatmap(p, X, offset=-1, width=0.4, color=NA,
 
 \
 
-### Univariate models
+# Univariate models
 
 First, let's see what conclusions we would come to by using traditional univariate approaches to examine the relationship between two of our chosen traits (N_mass and d13C): ordinary least squares regression (OLS), phylogenetic generalised least squares (PGLS), and finally PGLS with lambda (phylogenetic signal) estimated from the data (LAMBDA).
 
@@ -410,7 +416,7 @@ OLS reports a significant negative relationship between `d13C` and `N_mass`. How
 
 \
 
-### MR-PMM
+# MR-PMM
 
 Let's try fitting a MR-PMM using all three traits and see whether a negative correlation between `d13C` and `N_mass` is indeed manifesting on the phylogenetic level. First we will fit the model using `MCMCglmm`.
 
@@ -545,7 +551,7 @@ cbind(data.frame(trait_pair=rep(c("N_mass:d13C", "N_mass:LMA", "d13C:LMA"), each
 
 \
 
-### Multi-level meta-analysis
+## Multi-level meta-analysis
 
 The models so far have used the simplified data set of species mean trait values (one row per species). Pooling data in this way discards information, therefore it is preferable to perform analyses on observation level data. Due to the complex multi-level structure of records (multiple observations on multiple taxa from multiple studies), we must specify additional random effects to correctly capture this structural hierarchy. For such an analysis, we can use the value of `replicates` associated with each record to weight observations during model fit.
 
@@ -614,8 +620,11 @@ dat_meta %>% ggplot(aes(x = dataset_id, y = d13C)) + geom_point() + theme_classi
 ```
 
 
-### Model Validation
+## Model Validation
 
+We explore two approaches to model validation: 1) we assessed within-sample predictive capacity using marginal and conditional posterior predictive checks; and 2) we assessed out-of-sample predictive capacity using LOO-CV. 
+
+First, we define some convenience functions.
 
 ```{r, eval = F}
 
@@ -628,7 +637,6 @@ rstan::get_elapsed_time(fit$fit) %>% apply(1,sum) %>% max
 # names of model parameters, excluding random effects and log-probability
 pars <- fit %>% as_tibble %>% select(-starts_with("r_"),-"lp__") %>% names
 r_pars <- fit %>% as_tibble %>% select(starts_with("r_")) %>% names
-
 
 #------------------------
 # functions
@@ -662,6 +670,13 @@ plot_pred <- function(x, y_obs = NULL, cov, ylab = NULL, xlab = NULL, title = NU
        subtitle = ifelse(subtitle == TRUE, paste("Coverage: ", cov[1], "% at 90th quantile, ",cov[2],"% at 50th quantile"), ""))
 }
 
+```
+
+\
+
+Models fit in `brms` benefits from seemless compatability with the powerful `Bayesplot` package for visualising MCMC chains and model diagnostics.
+
+```{r, eval = F}
 #------------------------
 # convergence diagnostics
 #------------------------
@@ -670,6 +685,14 @@ mcmc_rhat(rhat(fit, pars = r_pars))
 mcmc_neff(neff_ratio(fit, pars = r_pars))
 
 rstan::check_hmc_diagnostics(fit$fit)
+
+```
+
+\
+
+For the first approach to model validation, posterior predictive checks verify the capacity of the model to generate plausible data; the proportion of data included in the nominal predictive intervals is generally close to expectation for each method and response trait.
+
+```{r, eval = F}
 
 #----------------------------
 # posterior predictive checks
@@ -727,6 +750,13 @@ ggarrange(plot_pred(ppF1$data %>% select(6:10), ppF1$data$y_obs, covF1, "N_mass"
           plot_pred(ppF3$data %>% select(6:10), ppF3$data$y_obs, covF3, "LMA"),
           ncol = 1)
 
+```
+
+\
+
+For LOO-CV, we find the approximate method [@burkner2021] fails for a small proportion of the data (especially for LMA), necessitating manual re-fits of the model. The computational demand of re-fitting such a large model for more than a few troublesome test data points is probably not feasible for the average desktop workstation. However, as HPC becomes more accessible to the average researcher, manual re-fitting procedures may represent a viable option to LOO-CV of MR-PMM.
+
+```{r, eval = F}
 
 #----------------
 # loo predictions
@@ -797,3 +827,15 @@ tibble(r1 = pe1, r2 = pe2, r3 = pe3) %>%
 
 ```
 
+\
+
+# Notes
+
+By using the consensus tree from [@thornhill2019dated] to compute $C$, we assume this phylogeny is known without error. In reality, phylogenies are inferred from sequence data with uncertainty, and thus represent mere hypotheses of the evolutionary relationships between taxa. Where-ever possible, it is preferable to propagate this uncertainty into our models. In a fully Bayesian setting, integrating over phylogenetic uncertainty is achieved by fitting models to a posterior sample of trees, e.g. with a function such as `brms_multiple`. When sequence data are available, an even more integrative approach is to infer phylogenies jointly with the estimation of trait correlations in the likelihood function (e.g. Cybis et al. 2016). We did not have access to a full posterior distribution of trees, though Thornhill et al. (2019) do present three alternative consensus trees; two inferred by ML and a third representing a consensus tree from a Bayesian analysis. Therefore, as an informal approach to test how sensitive results were to phylogenetic uncertainty, we fit the model to each tree separately and confirmed that each fit produced qualitatively equivalent parameter estimates (results not shown).
+
+For discussion of the results of this analysis, see the manuscript at https://doi.org/10.1101/2022.12.13.520338.
+
+\
+\
+
+# References
