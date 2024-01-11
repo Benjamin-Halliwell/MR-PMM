@@ -6,11 +6,11 @@ https://doi.org/10.1101/2022.12.13.520338
 
 The first tutorial covers model specification, diagnostics, validation, inference and simulation for multi-response phylogenetic mixed models (MR-PMM) in R.
 
-[Tutorial](https://Benjamin-Halliwell.github.io/MR-PMM/MR-PMM_tutorial.html)
+[Tutorial 1](https://Benjamin-Halliwell.github.io/MR-PMM/MR-PMM_tutorial.html)
 
 The second tutorial covers an example MR-PMM analysis of Eucalyptus leaf traits from the AusTraits database.
 
-[Tutorial](https://Benjamin-Halliwell.github.io/MR-PMM/MR-PMM_euc_example_analysis.html)
+[Tutorial 2](https://Benjamin-Halliwell.github.io/MR-PMM/MR-PMM_euc_example_analysis.html)
 
 Additional demonstrations of model diagnostics and validation techniques in the context of MR-PMM are given below.
 
