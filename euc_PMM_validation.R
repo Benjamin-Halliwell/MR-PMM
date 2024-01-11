@@ -10,9 +10,9 @@ library(purrr)
 
 rm(list = ls())
 #fit <- readRDS("PMM_brms_2022_02_08.rds")
-fit <- readRDS("b.mod.rds")
 
-select <- dplyr::select
+# choose model
+fit <- fit_MR_2
 
 # time to fit (seconds): slowest chain of four
 rstan::get_elapsed_time(fit$fit) %>% apply(1,sum) %>% max
@@ -21,6 +21,38 @@ rstan::get_elapsed_time(fit$fit) %>% apply(1,sum) %>% max
 pars <- fit %>% as_tibble %>% select(-starts_with("r_"),-"lp__") %>% names
 r_pars <- fit %>% as_tibble %>% select(starts_with("r_")) %>% names
 
+
+#------------------------
+# functions
+#------------------------
+
+# specify dplyr select function
+select <- dplyr::select
+
+# calculate coverage
+get_coverage <- function(data) data %>%
+  transmute(cov90 = (hh >= y_obs) & (ll <= y_obs),
+            cov50 = (h >= y_obs) & (l <= y_obs)) %>% 
+  map_dbl(sum) %>% `/`(nrow(data)) %>% `*`(100) %>% round(.,1)
+
+# plot predictions
+plot_pred <- function(x, y_obs = NULL, cov, ylab = NULL, xlab = NULL, title = NULL, subtitle = FALSE, arrange = FALSE) {
+  if(!is.null(y_obs)) x <- x %>% mutate(y_obs = y_obs)
+  if(arrange == TRUE) x <- x %>% arrange(m)
+  x %>%  
+  mutate(x = 1:n()) %>% 
+  ggplot(aes(x)) +
+  geom_linerange(aes(ymin = ll, ymax = hh), size = 1, col = blues9[3]) +
+  geom_linerange(aes(ymin = l, ymax = h), size = 1, col = blues9[5]) +
+    geom_point(aes(y=m), size = 2, col = blues9[7]) +
+  geom_point(aes(y = y_obs), size = 2) +
+  theme_classic() +
+  theme(plot.subtitle = element_text(size = 10)) +
+  labs(x = xlab,
+       y = ylab,
+       title = title,
+       subtitle = ifelse(subtitle == TRUE, paste("Coverage: ", cov[1], "% at 90th quantile, ",cov[2],"% at 50th quantile"), ""))
+}
 
 #------------------------
 # convergence diagnostics
@@ -35,61 +67,58 @@ rstan::check_hmc_diagnostics(fit$fit)
 # posterior predictive checks
 #----------------------------
 
-# prediction conditional on species-level random-intercept estimates
-ppA1 <- pp_check(fit, resp= "logSLA", type = "intervals") + labs(subtitle = "Response: logSLA")
-ppA2 <- pp_check(fit, resp= "N", type = "intervals") + labs(subtitle = "Response: N")
-ppA3 <- pp_check(fit, resp= "d13C", type = "intervals") + labs(subtitle = "Response: d13C")
+# CONDITIONAL - prediction conditional on species-level random-intercept estimates
+ppC1 <- pp_check(fit, resp= "Nmass", type = "intervals") + labs(subtitle = "Response: N_mass")
+ppC2 <- pp_check(fit, resp= "d13C", type = "intervals") + labs(subtitle = "Response: d13C")
+ppC3 <- pp_check(fit, resp= "LMA", type = "intervals") + labs(subtitle = "Response: LMA")
 
-ggarrange(ppA1, ppA2, ppA3, nrow = 3, legend = "none") %>% 
-  annotate_figure(top = "PP-check: conditional on species-level random-intercept estimates")
+covC1 <- get_coverage(ppC1$data)
+covC2 <- get_coverage(ppC2$data)
+covC3 <- get_coverage(ppC3$data)
 
-get_coverage <- function(data) data %>%
-  transmute(cov90 = (hh >= y_obs) & (ll <= y_obs),
-            cov50 = (h >= y_obs) & (l <= y_obs)) %>% 
-  map_dbl(sum)
+ggarrange(plot_pred(ppC1$data %>% select(6:10), ppC1$data$y_obs, covC1, "N_mass", arrange = TRUE),
+          plot_pred(ppC2$data %>% select(6:10), ppC2$data$y_obs, covC2, "d13C", arrange = TRUE),
+          plot_pred(ppC3$data %>% select(6:10), ppC3$data$y_obs, covC3, "LMA", arrange = TRUE),
+          ncol = 1)
 
-get_coverage(ppA1$data)
-get_coverage(ppA2$data)
-get_coverage(ppA3$data)
+# MARGINAL - prediction marginalised over Gaussian distribution of phylogenetic random effects
+ppM1 <- pp_check(fit, resp= "Nmass", type = "intervals", allow_new_levels = T, sample_new_levels = "gaussian", newdata = fit$data %>% mutate(phylo = NA))
+ppM2 <- pp_check(fit, resp= "d13C", type = "intervals", allow_new_levels = T, sample_new_levels = "gaussian", newdata = fit$data %>% mutate(phylo = NA))
+ppM3 <- pp_check(fit, resp= "LMA", type = "intervals", allow_new_levels = T, sample_new_levels = "gaussian", newdata = fit$data %>% mutate(phylo = NA))
 
-# fixed effects only (i.e., ignore random effects by setting them to zero)
-ppB1 <- pp_check(fit, resp= "logSLA", type = "intervals", re_formula = NA) + labs(subtitle = "Response: logSLA")
-ppB2 <- pp_check(fit, resp= "N", type = "intervals", re_formula = NA) + labs(subtitle = "Response: N")
-ppB3 <- pp_check(fit, resp= "d13C", type = "intervals", re_formula = NA) + labs(subtitle = "Response: d13C")
+covM1 <- get_coverage(ppM1$data)
+covM2 <- get_coverage(ppM2$data)
+covM3 <- get_coverage(ppM3$data)
 
-ggarrange(ppB1, ppB2, ppB3, nrow = 3, legend = "none") %>% 
-  annotate_figure(top = "PP-check: fixed effects only (i.e., ignore random effects by setting them to zero)")
+# arrange by predictive mean of the conditional model
+ppM1$data <- ppM1$data %>% arrange(match(y_id, ppC1$data %>% arrange(m) %>% pull(y_id)))
+ppM2$data <- ppM2$data %>% arrange(match(y_id, ppC2$data %>% arrange(m) %>% pull(y_id)))
+ppM3$data <- ppM3$data %>% arrange(match(y_id, ppC3$data %>% arrange(m) %>% pull(y_id)))
 
-get_coverage(ppB1$data)
-get_coverage(ppB2$data)
-get_coverage(ppB3$data)
+ggarrange(plot_pred(ppM1$data %>% select(6:10), ppM1$data$y_obs, covM1, "N_mass"),
+          plot_pred(ppM2$data %>% select(6:10), ppM2$data$y_obs, covM2, "d13C"),
+          plot_pred(ppM3$data %>% select(6:10), ppM3$data$y_obs, covM3, "LMA"),
+          ncol = 1)
 
-# prediction marginalised over Gaussian distribution of random effects
-pp1 <- pp_check(fit, resp= "logSLA", type = "intervals", 
-         allow_new_levels = T, 
-         sample_new_levels = "gaussian",
-         newdata = fit$data %>% mutate(animal = NA))
+# FIXED EFFECTS ONLY - (i.e., ignore random effects by setting them to zero)
+ppF1 <- pp_check(fit, resp= "Nmass", type = "intervals", re_formula = NA) + labs(subtitle = "Response: N_mass")
+ppF2 <- pp_check(fit, resp= "d13C", type = "intervals", re_formula = NA) + labs(subtitle = "Response: d13C")
+ppF3 <- pp_check(fit, resp= "LMA", type = "intervals", re_formula = NA) + labs(subtitle = "Response: LMA")
 
-pp2 <- pp_check(fit, resp= "N", type = "intervals", 
-                allow_new_levels = T, 
-                sample_new_levels = "gaussian",
-                newdata = fit$data %>% mutate(animal = NA))
+covF1 <- get_coverage(ppF1$data)
+covF2 <- get_coverage(ppF2$data)
+covF3 <- get_coverage(ppF3$data)
 
-pp3 <- pp_check(fit, resp= "d13C", type = "intervals", 
-                allow_new_levels = T, 
-                sample_new_levels = "gaussian",
-                newdata = fit$data %>% mutate(animal = NA))
+# arrange by predictive mean of the conditional model
+ppF1$data <- ppF1$data %>% arrange(match(y_id, ppC1$data %>% arrange(m) %>% pull(y_id)))
+ppF2$data <- ppF2$data %>% arrange(match(y_id, ppC2$data %>% arrange(m) %>% pull(y_id)))
+ppF3$data <- ppF3$data %>% arrange(match(y_id, ppC3$data %>% arrange(m) %>% pull(y_id)))
 
-ggarrange(
-  pp1 + labs(subtitle = "Response: logSLA"),
-  pp2 + labs(subtitle = "Response: N"),
-  pp3 + labs(subtitle = "Response: d13C"),
-  nrow = 3, legend = "none") %>% 
-  annotate_figure(top = "PP-check: marginalised over Gaussian distribution of random effects")
+ggarrange(plot_pred(ppF1$data %>% select(6:10), ppF1$data$y_obs, covF1, "N_mass"),
+          plot_pred(ppF2$data %>% select(6:10), ppF2$data$y_obs, covF2, "d13C"),
+          plot_pred(ppF3$data %>% select(6:10), ppF3$data$y_obs, covF3, "LMA"),
+          ncol = 1)
 
-pp1$data %>% get_coverage()
-pp2$data %>% get_coverage()
-pp3$data %>% get_coverage()
 
 #----------------
 # loo predictions
@@ -97,18 +126,17 @@ pp3$data %>% get_coverage()
 
 # draw posterior samples
 ppred <- posterior_predict(fit)
-ppred1 <- ppred[,,1] # logSLA
-ppred2 <- ppred[,,2] # N
-ppred3 <- ppred[,,3] # d13C
-
+ppred1 <- ppred[,,1] # N_mass
+ppred2 <- ppred[,,2] # d13C
+ppred3 <- ppred[,,3] # LMA
 
 # compute importance sampling weights
-log_ratios1 <- -1*log_lik(fit, resp = "logSLA")
-log_ratios2 <- -1*log_lik(fit, resp = "N")
-log_ratios3 <- -1*log_lik(fit, resp = "d13C")
-r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:12, each = 1000))
-r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:12, each = 1000))
-r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:12, each = 1000))
+log_ratios1 <- -1*log_lik(fit, resp = "Nmass")
+log_ratios2 <- -1*log_lik(fit, resp = "d13C")
+log_ratios3 <- -1*log_lik(fit, resp = "LMA")
+r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 1000))
+r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 1000))
+r_eff3 <- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 1000))
 psis1 <- loo::psis(log_ratios1, cores = 10, r_eff = r_eff1)
 psis2 <- loo::psis(log_ratios2, cores = 10, r_eff = r_eff2)
 psis3 <- loo::psis(log_ratios3, cores = 10, r_eff = r_eff3)
@@ -128,49 +156,33 @@ loo_pred_probs3 <- loo_pred3$value %>% t %>% as.data.frame() %>% as_tibble()
 colnames(loo_pred_probs1) <- colnames(loo_pred_probs2) <- colnames(loo_pred_probs3) <- c("ll","l","m","h","hh")
 
 # compute coverage
-cov1 <- loo_pred_probs1 %>% mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = fit$data$log_SLA) %>% 
+cov1 <- loo_pred_probs1 %>% mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = fit$data$N_mass) %>% 
   get_coverage() * 100/length(fit$data$animal); cov1 <- round(cov1)
-cov2 <- loo_pred_probs2 %>% mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = fit$data$N) %>% 
+cov2 <- loo_pred_probs2 %>% mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = fit$data$d13C) %>% 
   get_coverage() * 100/length(fit$data$animal); cov2 <- round(cov2)
-cov3 <- loo_pred_probs3 %>% mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = fit$data$d13C) %>% 
+cov3 <- loo_pred_probs3 %>% mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = fit$data$LMA) %>% 
   get_coverage() * 100/length(fit$data$animal); cov3 <- round(cov3)
 
-# plot function
-plot_loo_pred <- function(x,y_obs,cov, ylab = "y") x %>%  
-  mutate(y_obs = y_obs) %>% 
-  arrange(m) %>% 
-  mutate(x = 1:n()) %>% 
-  ggplot(aes(x)) +
-  geom_point(aes(y=m), size =3, col = blues9[4]) +
-  geom_linerange(aes(ymin = ll, ymax = hh), col = blues9[4]) +
-  geom_linerange(aes(ymin = l, ymax = h), size = 1, col = blues9[4]) +
-  geom_point(aes(y = y_obs)) +
-  theme_classic() +
-  labs(y = ylab, subtitle = paste("Coverage: ", cov[1], "% at 90th quantile, ",cov[2],"% at 50th quantile"),
-       title = "LOO-predictive checks")
 
 # main plot
-ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$log_SLA, cov1, "logSLA"),
-          plot_loo_pred(loo_pred_probs2, fit$data$N, cov2, "N"),
-          plot_loo_pred(loo_pred_probs3, fit$data$d13C, cov3, "d13C"),
+ggarrange(plot_pred(loo_pred_probs1, fit$data$N_mass, cov1, "N_mass", arrange = TRUE),
+          plot_pred(loo_pred_probs2, fit$data$d13C, cov2, "d13C", arrange = TRUE),
+          plot_pred(loo_pred_probs3, fit$data$LMA, cov3, "LMA", arrange = TRUE),
           ncol = 1)
-
-#ggsave("loo_post_pred_2022_02_10.png", width = 8, height = 6)
-
 
 
 #------------------
 # residual analysis
 #------------------
-pe1 <- predictive_error(fit, resp = "logSLA") %>% as.data.frame() %>% map_dbl(mean)
-pe2 <- predictive_error(fit, resp = "N") %>% as.data.frame() %>% map_dbl(mean)
-pe3 <- predictive_error(fit, resp = "d13C") %>% as.data.frame() %>% map_dbl(mean)
+pe1 <- predictive_error(fit, resp = "Nmass") %>% as.data.frame() %>% map_dbl(mean)
+pe2 <- predictive_error(fit, resp = "d13C") %>% as.data.frame() %>% map_dbl(mean)
+pe3 <- predictive_error(fit, resp = "LMA") %>% as.data.frame() %>% map_dbl(mean)
 
 tibble(r1 = pe1, r2 = pe2, r3 = pe3) %>% 
   ggplot() + 
-  stat_qq(aes(sample = r1, col = "logSLA")) +
-  stat_qq(aes(sample = r2, col = "N")) +
-  stat_qq(aes(sample = r3, col = "d13C")) +
+  stat_qq(aes(sample = r1, col = "N_mass")) +
+  stat_qq(aes(sample = r2, col = "d13C")) +
+  stat_qq(aes(sample = r3, col = "LMA")) +
   scale_colour_manual(values = c(blues9[4], blues9[6], blues9[8])) +
   labs(col = "Response", subtitle = "QQ plots") +
   theme_classic()
