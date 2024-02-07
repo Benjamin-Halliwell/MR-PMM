@@ -839,9 +839,9 @@ m.3 <- MCMCglmm(cbind(x, y, z) ~ trait-1,
                 family   = c("gaussian","gaussian","gaussian"), 
                 data     = d3, 
                 prior    = p.m.3, 
-                nitt     = 11000, 
-                burnin   = 1000, 
-                thin     = 10,
+                nitt     = 110000, 
+                burnin   = 10000, 
+                thin     = 100,
                 pr = T, verbose = F
                 )
 
