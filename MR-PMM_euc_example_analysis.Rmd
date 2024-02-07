@@ -1,7 +1,8 @@
 ---
-title: "MR-PMM Eucalyptus Example Analysis"
+title: "Example MR-PMM - Leaf Traits in Eucalyptus"
 author: "Ben Halliwell"
-date: "2023-11-27"
+date: "2024"
+bibliography: bib_MR-PMM.bib
 output: 
   html_document:
     number_sections: false
@@ -13,9 +14,16 @@ editor_options:
   chunk_output_type: console
 ---
 
+\
+
+$\color{orange}{\text{N.B. This tutorial is a live document that will continue to be improved and updated by the authors. Enjoy!}}$
+
+\
+
 # Introduction
 
-In this tutorial we will use the AusTraits database to explore the benefits of multi-response phylogenetic mixed models (MR-PMM). AusTraits is a relational database containing records of ~500 plant traits across ~30,000 Australian plant taxa (https://austraits.org/). The first step is to install and load any required packages, then load in the AusTraits data. For reproducibility, all analyses will use version 4.2.0 of AusTraits (https://zenodo.org/records/8353840).
+In this tutorial we will use the AusTraits database [@falster2021austraits] to explore the benefits of multi-response phylogenetic mixed models (MR-PMM). AusTraits is a relational database containing records of ~500 plant traits across ~30,000 Australian plant taxa (https://austraits.org/). The first step is to install and load any required packages, then load in the AusTraits data. For reproducibility, all analyses will use version 4.2.0 of AusTraits (https://zenodo.org/records/8353840). This tutorial is currently set up for users to download the relevant files directly from GitHub and inspect outputs of each code chunk within Rstudio on their local machine.
+
 
 ```{r setup, include=FALSE, eval = T}
 knitr::opts_chunk$set(echo = TRUE)
@@ -79,9 +87,9 @@ euc_data %>% select(basis_of_record) %>% unique() # types of records
 
 \
 
-We will focus on three continuous traits relevant to leaf economics and water use efficiency: `leaf_mass_per_area` (LMA), `leaf_N_per_dry_mass` (N_mass) and `leaf_delta13C` (d13C) ; and one (binary) discrete trait: `plant_growth_form`, which classifies taxa as either a tree (single main stem) or mallee (multiple spreading stems). We will also have to make some decisions about when to exclude data, and how to treat records that are not reported in a format conducive to our analyses. Here we choose to exclude data from experimental studies, limiting ourselves to observations on field and captive-cultivated (i.e., botanical gardens and arboreta) specimens, as well as measurements on preserved specimens and expert reports from the literature (i.e., Flora field guides). We also limit ourselves to observations on reproductively mature individuals.
+We will focus on three continuous traits relevant to leaf economics and water use efficiency: `leaf_mass_per_area` (LMA), `leaf_N_per_dry_mass` (N_mass) and `leaf_delta13C` (d13C). Some important decisions to be made are when to exclude data, and how to treat records that are not reported in a format conducive to our analyses. Here we choose to exclude data from experimental studies, limiting ourselves to observations on field and captive-cultivated (i.e., botanical gardens and arboreta) specimens, as well as measurements on preserved specimens and expert reports from the literature (i.e., Flora field guides). We also limit ourselves to observations on reproductively mature individuals.
 
-Another consideration for these data will be properly integrating different types of observations. For example, some records in AusTraits represent raw trait values observed on a single individual (replicates = 1), where-as others represent mean trait values calculated from observations on multiple individuals (replicates > 1). From a modelling perspective, we would like observations based on more replicates to have a greater influence on the estimation of model parameters. Hence, observations should be weighted proportionate to their level of replication during model fit. The variable `replicates` reports an integer value for some records, but is also sometimes reported as a range, e.g., "3-5". To be conservative, we can define the lower bound of this range as the level of replication for that observation. This represents one of many arbitrary decisions that must be made when attempting to collate data from diverse sources. The important thing is to keep a good record of all such decisions. First, so their influence on results may be tested (e.g., with sensitivity analyses), and second so they can be adequately described and justified in the manuscript.
+Another consideration for these data will be properly integrating different types of observations. For example, some records in AusTraits represent raw trait values observed on a single individual (replicates = 1), where-as others represent mean trait values calculated from observations on multiple individuals (replicates > 1). From a modelling perspective, we would like observations based on more replicates to have a greater influence on the estimation of model parameters. Hence, observations should be weighted proportionate to their level of replication during model fit. The variable `replicates` reports an integer value for some records, but is also sometimes reported as a range, e.g., "3-5". To be conservative, we can define the lower bound of this range as the level of replication for that observation. This represents one of many arbitrary decisions that must be made when attempting to collate data from diverse sources. The important thing is to keep a good record of all such decisions. First, so their influence on results may be tested (e.g., with sensitivity analyses), and second so they can be adequately described and justified for publication.
 
 
 ```{r, eval = F}
@@ -124,7 +132,7 @@ euc_data <- euc_data %>%
 
 ## Phylogeny
 
-After our initial refinement of records to include, the next step is to match the nomenclature (species naming conventions) between our trait data and the tip labels of our phylogenetic tree. We will use the maximum likelihood Eucalypt phylogeny presented by Thornhill et al. (2019) for all our analyses (N.B. models are easily extended to incorporate phylogenetic uncertainty by fitting over a sample of candidate trees and combining posterior estimates prior to inference). To proceed with analyses, our tree must be binary (fully bifurcating with no polytomies) and ultrametric (clock-like with all tips right adjusted). So the first step is to perform these checks and amend the tree where necessary.
+After our initial refinement of records to include, the next step is to match the nomenclature (species naming conventions) between our trait data and the tip labels of our phylogenetic tree. We will use the maximum likelihood Eucalypt phylogeny presented by [@thornhill2019dated] for all our analyses (N.B. models are easily extended to incorporate phylogenetic uncertainty by fitting over a sample of candidate trees and combining posterior estimates prior to inference). To proceed with analyses, our tree must be binary (fully bifurcating with no polytomies) and ultrametric (clock-like with all tips right adjusted). So the first step is to perform these checks and amend the tree where necessary.
 
 ```{r, eval = F}
 
@@ -479,7 +487,7 @@ summary(fit_MR) # for the 1000 samples drawn, the effective sample size for some
 
 \
 
-Based on these initial diagnostics we would want to run the chains for longer (increase `nitt`) with greater `thin` to attain a higher effective sample size. Detailed coverage of model diagnostics and predictive assessment for MR-PMM can be found in our Github tutorial (https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html).
+Based on these initial diagnostics we would want to run the chains for longer (increase `nitt`) with greater `thin` to attain a higher effective sample size. Detailed coverage of model diagnostics and predictive assessment for MR-PMM can be found in Tutorial 1 on the MR-PMM GitHub repo (https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html).
 
 Ok, so what does our MR-PMM tell us about the relationship between `d13C` and `N_mass`? In the model summary, we can see the posterior mean and 95% credible intervals of each model parameter. The intercepts for each trait are reported as location effects, the phylogenetic (co)variances under `phylo` and the residual (co)variances under `units`. A negative phylogenetic covariance between `d13C` and `N_mass` is indicated by the negative lower and upper bounds for the phylogenetic covariance term `traitd13C:traitN_mass.phylo`. However, in order to make meaningful comparisons, we must calculate the correlation (scaled covariance) between traits on both the phylogenetic and residual level.
 
@@ -831,7 +839,7 @@ tibble(r1 = pe1, r2 = pe2, r3 = pe3) %>%
 
 # Notes
 
-By using the consensus tree from [@thornhill2019dated] to compute $C$, we assume this phylogeny is known without error. In reality, phylogenies are inferred from sequence data with uncertainty, and thus represent mere hypotheses of the evolutionary relationships between taxa. Where-ever possible, it is preferable to propagate this uncertainty into our models. In a fully Bayesian setting, integrating over phylogenetic uncertainty is achieved by fitting models to a posterior sample of trees, e.g. with a function such as `brms_multiple`. When sequence data are available, an even more integrative approach is to infer phylogenies jointly with the estimation of trait correlations in the likelihood function (e.g. Cybis et al. 2016). We did not have access to a full posterior distribution of trees, though Thornhill et al. (2019) do present three alternative consensus trees; two inferred by ML and a third representing a consensus tree from a Bayesian analysis. Therefore, as an informal approach to test how sensitive results were to phylogenetic uncertainty, we fit the model to each tree separately and confirmed that each fit produced qualitatively equivalent parameter estimates (results not shown).
+By using the consensus tree from [@thornhill2019dated] to compute $C$, we assume this phylogeny is known without error. In reality, phylogenies are inferred from sequence data with uncertainty, and thus represent mere hypotheses of the evolutionary relationships between taxa. Where-ever possible, it is preferable to propagate this uncertainty into our models. In a fully Bayesian setting, integrating over phylogenetic uncertainty is achieved by fitting models to a posterior sample of trees, e.g. with a function such as `brms_multiple`. When sequence data are available, an even more integrative approach is to infer phylogenies jointly with the estimation of trait correlations in the likelihood function (e.g. [@cybis2015assessing]). We did not have access to a full posterior distribution of trees, though [@thornhill2019dated] do present three alternative consensus trees; two inferred by ML and a third representing a consensus tree from a Bayesian analysis. Therefore, as an informal approach to test how sensitive results were to phylogenetic uncertainty, we fit the model to each tree separately and confirmed that each fit produced qualitatively equivalent parameter estimates (results not shown).
 
 For discussion of the results of this analysis, see the manuscript at https://doi.org/10.1101/2022.12.13.520338.
 

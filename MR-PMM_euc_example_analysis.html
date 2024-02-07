@@ -11,9 +11,9 @@
 
 <meta name="author" content="Ben Halliwell" />
 
-<meta name="date" content="2023-11-27" />
+<meta name="date" content="2024-01-01" />
 
-<title>MR-PMM Eucalyptus Example Analysis</title>
+<title>Example MR-PMM - Leaf Traits in Eucalyptus</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -1321,6 +1321,28 @@ if (window.hljs) {
 
 
 
+<style type="text/css">
+
+div.csl-bib-body { }
+div.csl-entry {
+clear: both;
+}
+.hanging div.csl-entry {
+margin-left:2em;
+text-indent:-2em;
+}
+div.csl-left-margin {
+min-width:2em;
+float:left;
+}
+div.csl-right-inline {
+margin-left:2em;
+padding-left:1em;
+}
+div.csl-indent {
+margin-left: 2em;
+}
+</style>
 
 
 
@@ -1485,21 +1507,32 @@ font-size: 0.95em;
 
 
 
-<h1 class="title toc-ignore">MR-PMM Eucalyptus Example Analysis</h1>
+<h1 class="title toc-ignore">Example MR-PMM - Leaf Traits in
+Eucalyptus</h1>
 <h4 class="author">Ben Halliwell</h4>
-<h4 class="date">2023-11-27</h4>
+<h4 class="date">2024</h4>
 
 </div>
 
 
+<p><br />
+</p>
+<p><span class="math inline">\(\color{orange}{\text{N.B. This tutorial
+is a live document that will continue to be improved and updated by the
+authors. Enjoy!}}\)</span></p>
+<p><br />
+</p>
 <div id="introduction" class="section level1">
 <h1>Introduction</h1>
-<p>In this tutorial we will use the AusTraits database to explore the
-benefits of multi-response phylogenetic mixed models (MR-PMM). AusTraits
-is a relational database containing records of ~500 plant traits across
+<p>In this tutorial we will use the AusTraits database <span class="citation">(Falster et al. 2021)</span> to explore the benefits of
+multi-response phylogenetic mixed models (MR-PMM). AusTraits is a
+relational database containing records of ~500 plant traits across
 ~30,000 Australian plant taxa (<a href="https://austraits.org/" class="uri">https://austraits.org/</a>). The first step is to install
 and load any required packages, then load in the AusTraits data. For
-reproducibility, all analyses will use version 4.2.0 of AusTraits (<a href="https://zenodo.org/records/8353840" class="uri">https://zenodo.org/records/8353840</a>).</p>
+reproducibility, all analyses will use version 4.2.0 of AusTraits (<a href="https://zenodo.org/records/8353840" class="uri">https://zenodo.org/records/8353840</a>). This tutorial is
+currently set up for users to download the relevant files directly from
+GitHub and inspect outputs of each code chunk within Rstudio on their
+local machine.</p>
 </div>
 <div id="data-cleaning-and-manipulation" class="section level1">
 <h1>Data cleaning and manipulation</h1>
@@ -1528,17 +1561,14 @@ euc_data %&gt;% select(basis_of_record) %&gt;% unique() # types of records</code
 <p>We will focus on three continuous traits relevant to leaf economics
 and water use efficiency: <code>leaf_mass_per_area</code> (LMA),
 <code>leaf_N_per_dry_mass</code> (N_mass) and <code>leaf_delta13C</code>
-(d13C) ; and one (binary) discrete trait:
-<code>plant_growth_form</code>, which classifies taxa as either a tree
-(single main stem) or mallee (multiple spreading stems). We will also
-have to make some decisions about when to exclude data, and how to treat
-records that are not reported in a format conducive to our analyses.
-Here we choose to exclude data from experimental studies, limiting
-ourselves to observations on field and captive-cultivated (i.e.,
-botanical gardens and arboreta) specimens, as well as measurements on
-preserved specimens and expert reports from the literature (i.e., Flora
-field guides). We also limit ourselves to observations on reproductively
-mature individuals.</p>
+(d13C). Some important decisions to be made are when to exclude data,
+and how to treat records that are not reported in a format conducive to
+our analyses. Here we choose to exclude data from experimental studies,
+limiting ourselves to observations on field and captive-cultivated
+(i.e., botanical gardens and arboreta) specimens, as well as
+measurements on preserved specimens and expert reports from the
+literature (i.e., Flora field guides). We also limit ourselves to
+observations on reproductively mature individuals.</p>
 <p>Another consideration for these data will be properly integrating
 different types of observations. For example, some records in AusTraits
 represent raw trait values observed on a single individual (replicates =
@@ -1556,7 +1586,7 @@ that must be made when attempting to collate data from diverse sources.
 The important thing is to keep a good record of all such decisions.
 First, so their influence on results may be tested (e.g., with
 sensitivity analyses), and second so they can be adequately described
-and justified in the manuscript.</p>
+and justified for publication.</p>
 <pre class="r"><code># choose traits to extract data on
 traits &lt;- c(&quot;leaf_mass_per_area&quot;, &quot;leaf_N_per_dry_mass&quot;, &quot;leaf_delta13C&quot;)
 num_traits &lt;- traits # we will focus on the numerical leaf traits initially
@@ -1595,14 +1625,13 @@ euc_data &lt;- euc_data %&gt;%
 <p>After our initial refinement of records to include, the next step is
 to match the nomenclature (species naming conventions) between our trait
 data and the tip labels of our phylogenetic tree. We will use the
-maximum likelihood Eucalypt phylogeny presented by Thornhill et
-al. (2019) for all our analyses (N.B. models are easily extended to
-incorporate phylogenetic uncertainty by fitting over a sample of
-candidate trees and combining posterior estimates prior to inference).
-To proceed with analyses, our tree must be binary (fully bifurcating
-with no polytomies) and ultrametric (clock-like with all tips right
-adjusted). So the first step is to perform these checks and amend the
-tree where necessary.</p>
+maximum likelihood Eucalypt phylogeny presented by <span class="citation">(Thornhill et al. 2019)</span> for all our analyses
+(N.B. models are easily extended to incorporate phylogenetic uncertainty
+by fitting over a sample of candidate trees and combining posterior
+estimates prior to inference). To proceed with analyses, our tree must
+be binary (fully bifurcating with no polytomies) and ultrametric
+(clock-like with all tips right adjusted). So the first step is to
+perform these checks and amend the tree where necessary.</p>
 <pre class="r"><code># read in Eucalypt phylogeny
 phy &lt;- read.tree(file=&quot;tree.ML1.tre&quot;)
 plot(phy, show.tip.label = F) # looks ultrametric
@@ -1960,8 +1989,8 @@ summary(fit_MR) # for the 1000 samples drawn, the effective sample size for some
 <p>Based on these initial diagnostics we would want to run the chains
 for longer (increase <code>nitt</code>) with greater <code>thin</code>
 to attain a higher effective sample size. Detailed coverage of model
-diagnostics and predictive assessment for MR-PMM can be found in our
-Github tutorial (<a href="https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html" class="uri">https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html</a>).</p>
+diagnostics and predictive assessment for MR-PMM can be found in
+Tutorial 1 on the MR-PMM GitHub repo (<a href="https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html" class="uri">https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html</a>).</p>
 <p>Ok, so what does our MR-PMM tell us about the relationship between
 <code>d13C</code> and <code>N_mass</code>? In the model summary, we can
 see the posterior mean and 95% credible intervals of each model
@@ -2227,13 +2256,13 @@ ggarrange(plot_pred(ppF1$data %&gt;% select(6:10), ppF1$data$y_obs, covF1, &quot
           ncol = 1)</code></pre>
 <p><br />
 </p>
-<p>For LOO-CV, we find the approximate method <span class="citation">[@burkner2021]</span> fails for a small proportion of
-the data (especially for LMA), necessitating manual re-fits of the
-model. The computational demand of re-fitting such a large model for
-more than a few troublesome test data points is probably not feasible
-for the average desktop workstation. However, as HPC becomes more
-accessible to the average researcher, manual re-fitting procedures may
-represent a viable option to LOO-CV of MR-PMM.</p>
+<p>For LOO-CV, we find the approximate method <span class="citation">(Bürkner, Gabry, and Vehtari 2021)</span> fails for a
+small proportion of the data (especially for LMA), necessitating manual
+re-fits of the model. The computational demand of re-fitting such a
+large model for more than a few troublesome test data points is probably
+not feasible for the average desktop workstation. However, as HPC
+becomes more accessible to the average researcher, manual re-fitting
+procedures may represent a viable option to LOO-CV of MR-PMM.</p>
 <pre class="r"><code>#----------------
 # loo predictions
 #----------------
@@ -2306,31 +2335,61 @@ tibble(r1 = pe1, r2 = pe2, r3 = pe3) %&gt;%
 </div>
 <div id="notes" class="section level1">
 <h1>Notes</h1>
-<p>By using the consensus tree from <span class="citation">[@thornhill2019dated]</span> to compute <span class="math inline">\(C\)</span>, we assume this phylogeny is known
-without error. In reality, phylogenies are inferred from sequence data
-with uncertainty, and thus represent mere hypotheses of the evolutionary
-relationships between taxa. Where-ever possible, it is preferable to
-propagate this uncertainty into our models. In a fully Bayesian setting,
-integrating over phylogenetic uncertainty is achieved by fitting models
-to a posterior sample of trees, e.g. with a function such as
-<code>brms_multiple</code>. When sequence data are available, an even
-more integrative approach is to infer phylogenies jointly with the
-estimation of trait correlations in the likelihood function (e.g. Cybis
-et al. 2016). We did not have access to a full posterior distribution of
-trees, though Thornhill et al. (2019) do present three alternative
-consensus trees; two inferred by ML and a third representing a consensus
-tree from a Bayesian analysis. Therefore, as an informal approach to
-test how sensitive results were to phylogenetic uncertainty, we fit the
-model to each tree separately and confirmed that each fit produced
-qualitatively equivalent parameter estimates (results not shown).</p>
+<p>By using the consensus tree from <span class="citation">(Thornhill et
+al. 2019)</span> to compute <span class="math inline">\(C\)</span>, we
+assume this phylogeny is known without error. In reality, phylogenies
+are inferred from sequence data with uncertainty, and thus represent
+mere hypotheses of the evolutionary relationships between taxa.
+Where-ever possible, it is preferable to propagate this uncertainty into
+our models. In a fully Bayesian setting, integrating over phylogenetic
+uncertainty is achieved by fitting models to a posterior sample of
+trees, e.g. with a function such as <code>brms_multiple</code>. When
+sequence data are available, an even more integrative approach is to
+infer phylogenies jointly with the estimation of trait correlations in
+the likelihood function (e.g. <span class="citation">(Cybis et al.
+2015)</span>). We did not have access to a full posterior distribution
+of trees, though <span class="citation">(Thornhill et al. 2019)</span>
+do present three alternative consensus trees; two inferred by ML and a
+third representing a consensus tree from a Bayesian analysis. Therefore,
+as an informal approach to test how sensitive results were to
+phylogenetic uncertainty, we fit the model to each tree separately and
+confirmed that each fit produced qualitatively equivalent parameter
+estimates (results not shown).</p>
 <p>For discussion of the results of this analysis, see the manuscript at
 <a href="https://doi.org/10.1101/2022.12.13.520338" class="uri">https://doi.org/10.1101/2022.12.13.520338</a>.</p>
 <p><br />
 <br />
 </p>
 </div>
-<div id="references" class="section level1">
-<h1>References</h1>
+<div id="references" class="section level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent">
+<div id="ref-burkner2021" class="csl-entry">
+Bürkner, Paul-Christian, Jonah Gabry, and Aki Vehtari. 2021.
+<span>“<span class="nocase">Efficient leave-one-out cross-validation for
+Bayesian non-factorized normal and Student-t models</span>.”</span>
+<em>Computational Statistics</em> 36 (2): 1243–61. <a href="https://doi.org/10.1007/s00180-020-01045-4">https://doi.org/10.1007/s00180-020-01045-4</a>.
+</div>
+<div id="ref-cybis2015assessing" class="csl-entry">
+Cybis, Gabriela B, Janet S Sinsheimer, Trevor Bedford, Alison E Mather,
+Philippe Lemey, and Marc A Suchard. 2015. <span>“Assessing Phenotypic
+Correlation Through the Multivariate Phylogenetic Latent Liability
+Model.”</span> <em>The Annals of Applied Statistics</em> 9 (2): 969.
+</div>
+<div id="ref-falster2021austraits" class="csl-entry">
+Falster, Daniel, Rachael Gallagher, Elizabeth H Wenk, Ian J Wright, Dony
+Indiarto, Samuel C Andrew, Caitlan Baxter, et al. 2021.
+<span>“AusTraits, a Curated Plant Trait Database for the Australian
+Flora.”</span> <em>Scientific Data</em> 8 (1): 1–20.
+</div>
+<div id="ref-thornhill2019dated" class="csl-entry">
+Thornhill, Andrew H, Michael D Crisp, Carsten Külheim, Kristy E Lam,
+Leigh A Nelson, David K Yeates, and Joseph T Miller. 2019. <span>“A
+Dated Molecular Perspective of Eucalypt Taxonomy, Evolution and
+Diversification.”</span> <em>Australian Systematic Botany</em> 32 (1):
+29–48.
+</div>
+</div>
 </div>
 
 
