@@ -55,8 +55,6 @@ $\color{orange}{\text{N.B. This tutorial is a live document that will continue t
 
 # Introduction
 
-<!-- PMM is motivated by the observation that closely related species tend to resemble each other phenotypically (a phenomenon known as phylogenetic signal), meaning species often do not represent independent data points with respect to evolutionary hypotheses. Instead, we must test for non-independence  and adjust our analyses accordingly. A central assumption of PMM therefore, is that we can combine a molecular phylogeny with a model of evolution (nominally, Brownian Motion (BM)) to generate a covariance matrix that defines the expected phenotypic similarity among taxa. The strength of this signal is optimised from the data during model fit, scaling the magnitude of effects to produce a phylogenetically informed regression. For univariate (UV) cases, this approach only estimates phylogenetic signal in the response variable, while any predictor variables in the model are assumed not to display phylogenetic signal. This assumption is commonly violated in analyses of real world data sets (where predictor variables often represent species traits that are themselves subject to phylogenetic effects), leading to identifiability issues. This problem is effectively addressed by moving offending predictor variables to the LHS of the model equation in multi-response (MR) implementations. This way, phylogenetic signal is simultaneously evaluated for all relevant traits, allowing (co)variances between response variables to be partitioned across multiple levels in the model hierarchy (e.g. phylogenetic and independent). This partitioning is important because phenotypic covariances (i.e., covariance on the level of traits measured), Cov(y1,y2), represent the sum of covariances on hierarchically lower levels, which need not align in magnitude or even direction. Thus, for comparative analyses of species traits with sufficient replication, MR-PMM should be preferred, as it offers more informative outputs with respect to evolutionary hypotheses. -->
-
 In this tutorial we will cover how to implement multi-response (MR) phylogenetic mixed models (PMM) in two popular R packages, MCMCglmm and brms. While frequentist implementations of the PMM are available (e.g., pglmm() in the "phyr" package), we advocate for a Bayesian approach due to 1) greater flexibility in fitting non-Gaussian response traits 2) suitability for estimating variance components associated with structured random effects; 3) the ability to sample conditional multivariate distributions, avoiding intractable integration problems faced by frequentist techniques.
 
 Throughout this tutorial, we explore a low dimensional example (tree with only 5 taxa) in order to show full workings of the matrix manipulations that underlie the covariance structures specified. This is for the sake of exposition only; analyses of the form presented may require much larger sample sizes [@housworth2004phylogenetic]. Thus, while the mathematical workings presented follow a 5 taxa example, model outputs are based on analyses of data simulated for 250 taxa.
@@ -98,9 +96,6 @@ In order to capture the expected influence of co-ancestry on $\mathbf{y}$, (simi
 \mathbf{b} &\sim& \mbox{MVN}(0, \sigma^2_{b}C)\\
 \end{eqnarray}\
 
-<!-- The phylogenetic variance (e.g., Brownian rate), $\sigma_{b}$, is a scalar to be estimated by the model and $A$ is a fixed $n\times n$ -->
-
-<!-- phylogenetic VCV matrix, where $n$ is the number of taxa in the tree. This model therefore takes as input a phylogenetic tree (topology and branch lengths), which is assumed to be known without error. The $A$ matrix itself is derived by taking the inverse of the distance matrix of the tree. It gives the expected (co)variance among taxa in the value of $y$ assuming some model of evolution (e.g. BM) along the branches of that tree. -->
 
 Here, $C$ is a fixed $n\times n$ phylogenetic covariance matrix, where $n$ is the number of taxa in the tree, and $\sigma^2_{b}$, the phylogenetic variance, is a scalar to be estimated by the model. This model therefore takes as input a phylogeny (topology and branch lengths), which is assumed to be known without error. The $C$ matrix is derived from the similarity matrix of the phylogeny. This gives the expected (co)variance among taxa in $\mathbf{y}$ assuming Brownian motion evolution [@symonds2014primer].
 
@@ -545,8 +540,6 @@ where $\rho^{\mathrm{{b}}}_{ij}$ is the phylogenetic correlation between traits 
 
 \
 
-<!-- Can't get parenthesis  around smallmatrix. Need \mathtools but how to load?  -->
-
 \begin{eqnarray}
 
 \Sigma^{\mathrm{b}} \otimes C
@@ -597,7 +590,6 @@ Similarly, the covariance matrix for the independent residual errors, $\Sigma^{\
 
 \
 
-<!-- Can't get parenthesis  around smallmatrix. Need \mathtools but how to load?  -->
 
 \begin{eqnarray}
 
@@ -803,25 +795,25 @@ b.2 %>% as_tibble() %>%
 
 ### Partial Correlations
 
-Due to the partitioning achieved in MR-PMM, the fitted covariance matrices $\Sigma^{\mathrm{b}}$ and $\Sigma^{\mathrm{e}}$ may be used to compute conditional dependencies (i.e., partial correlations) between traits on both the phylogenetic and independent level. These quantities describe the pairwise relationship between response traits after accounting for the effects of all other response traits specified in the model, and are thus analogous to the partial regression coefficients estimated in multiple regression. Partial correlations on the phylogenetic and independent level are derived by computing the matrix inverse (known as the precision matrix for covariance matrices) of $\Sigma^{\mathrm{b}}$ and $\Sigma^{\mathrm{e}}$, respectively. The off-diagonal elements of the resulting precision matrices are then used to compute partial correlations. For a bivariate model, standard and partial correlation estimates are identical because there are no additional response variables to control for when estimating $\rho^b_{12}$. However, for models with >2 response variables, standard and partial correlation estimates may vary drastically. To demonstrate, we will simulate data under a trivariate MR-PMM in which the correlation between two response variables $x$ and $y$ can be explained purely by independent causal relationships with $z$ (Figure 2 in the [manuscript](https://doi.org/10.1101/2022.12.13.520338)). For brevity, we will simulate data using a wrapper function `mrpmm_sim()` for the procedure outline above.
+Due to the partitioning achieved in MR-PMM, the fitted covariance matrices $\Sigma^{\mathrm{b}}$ and $\Sigma^{\mathrm{e}}$ may be used to compute conditional dependencies (i.e., partial correlations) between traits on both the phylogenetic and independent level. These quantities describe the pairwise relationship between response traits after accounting for the effects of all other response traits specified in the model, and are thus analogous to the partial regression coefficients estimated in multiple regression. Partial correlations on the phylogenetic and independent level are derived by computing the matrix inverse (known as the precision matrix for covariance matrices) of $\Sigma^{\mathrm{b}}$ and $\Sigma^{\mathrm{e}}$, respectively. The off-diagonal elements of the resulting precision matrices are then used to compute partial correlations. For a bivariate model, standard and partial correlation estimates are identical because there are no additional response variables to control for when estimating $\rho^b_{12}$. However, for models with >2 response variables, standard and partial correlation estimates may vary drastically. To demonstrate, we will simulate data under a trivariate MR-PMM in which the correlation between two variables $x$ and $y$ can be explained purely by independent causal relationships with a third variable $z$ (Figure 2 in the [manuscript](https://doi.org/10.1101/2022.12.13.520338)). For brevity, we will simulate data using a wrapper function `mrpmm_sim()` for the procedure outline above.
 
 ```{r}
 
 ## SIMULATE DATA
 m = 3 # number of traits
 
-# define Sigma_b for m = 3 traits (weak evidence that b12 is causal)
-sig.b <- c(b11 = 1, b22 = 1, b33 = 1) # sqrt of phylogenetic variance for each trait
-cor.b <- c(b12 = 0.56, b13 = 0.75, b23 = 0.75) # phylogenetic correlations
+# define Sigma_b for m = 3 traits (weak evidence that the correlation between x and y (bxy) is causal)
+sig.b <- c(bxx = 1, byy = 1, bzz = 1) # sqrt of phylogenetic variance for each trait
+cor.b <- c(bxy = 0.56, bxz = 0.75, byz = 0.75) # phylogenetic correlations
 Bcor <- matrix(c(c(sig.b[1],cor.b[1],cor.b[2]), # phylogenetic correlation matrix
                  c(cor.b[1],sig.b[2],cor.b[3]),
                  c(cor.b[2],cor.b[3],sig.b[3])),
                m,m, byrow = T) 
 Sigma_b <- matrix(kronecker(sig.b, sig.b),m,m)*Bcor # construct Sigma_b as point-wise product
 
-# define Sigma_e for m = 3 traits (weak evidence that e12 is causal)
-sig.e <- c(e11 = 1, e22 = 1, e33 = 1) # sqrt of phylogenetic variance for each trait
-cor.e <- c(e12 = 0.56, e13 = 0.75, e23 = 0.75) # phylogenetic correlations
+# define Sigma_e for m = 3 traits (weak evidence that exy is causal)
+sig.e <- c(exx = 1, eyy = 1, ezz = 1) # sqrt of phylogenetic variance for each trait
+cor.e <- c(exy = 0.56, exz = 0.75, eyz = 0.75) # phylogenetic correlations
 Ecor <- matrix(c(c(sig.e[1],cor.e[1],cor.e[2]), # phylogenetic correlation matrix
                  c(cor.e[1],sig.e[2],cor.e[3]),
                  c(cor.e[2],cor.e[3],sig.e[3])),
@@ -830,6 +822,7 @@ Sigma_e <- matrix(kronecker(sig.e, sig.e),m,m)*Ecor # construct Sigma_b as point
 
 # simulate data from MR-PMM
 d3 <- mrpmm_sim(n = 250, m = 3, Sigma_b, Sigma_e, phy)
+names(d3)[2:4] <- c("x","y","z")
 
 ```
 
@@ -839,22 +832,22 @@ we can then fit our model
 ## FIT MODEL
 p.m.3 <- list(G = list(G1 = list(V = diag(3), nu = 2.002)), 
               R = list(R1 = list(V = diag(3), nu = 2.002)))
-m.3 <- MCMCglmm(cbind(y1, y2, y3) ~ trait-1,
+m.3 <- MCMCglmm(cbind(x, y, z) ~ trait-1,
                 random   = ~us(trait):animal,
                 rcov     = ~us(trait):units,
                 pedigree = phy,
                 family   = c("gaussian","gaussian","gaussian"), 
                 data     = d3, 
                 prior    = p.m.3, 
-                nitt     = 110000, 
-                burnin   = 10000, 
-                thin     = 100,
+                nitt     = 11000, 
+                burnin   = 1000, 
+                thin     = 10,
                 pr = T, verbose = F
                 )
 
 ```
 
-calculate standard and partial correlation estimates and plot
+calculate standard and partial correlation estimates
 
 ```{r}
 
@@ -867,8 +860,10 @@ n_resp <- str_count(as.character(mod$Fixed$formula[2]), '\\w+')-1
 len_vcv <- n_resp^2
 
 # phylogenetic correlations
-phy_cov <- matrix(nrow = nrow(vcv), ncol = len_vcv);colnames(phy_cov) <- colnames(vcv)[1:len_vcv]
-par_phy_cov<- matrix(nrow = nrow(vcv), ncol = len_vcv);colnames(par_phy_cov) <- colnames(vcv)[1:len_vcv]
+phy_cov <- matrix(nrow = nrow(vcv), ncol = len_vcv)
+colnames(phy_cov) <- colnames(vcv)[1:len_vcv]
+par_phy_cov<- matrix(nrow = nrow(vcv), ncol = len_vcv)
+colnames(par_phy_cov) <- colnames(vcv)[1:len_vcv]
 for (i in 1:nrow(vcv)){
   cov <- vcv[i,]
   phy_vcv <- matrix(data = cov[1:len_vcv],
@@ -881,18 +876,25 @@ for (i in 1:nrow(vcv)){
 }
 # compute quantile summaries for each correlation estimate
 phy_cov_sum <- phy_cov %>% 
-  apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>% t() %>% round(2) %>% 
+  apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>%
+  t() %>% round(2) %>% 
   magrittr::set_colnames(c("ll", "l", "median", "u", "uu"))
-par_phy_cov_sum <- par_phy_cov %>% apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>% t() %>% round(2) %>% magrittr::set_colnames(c("ll", "l", "median", "u", "uu"))
-phy_cov_sum <- phy_cov_sum %>% as.data.frame() %>% distinct() %>% filter(median != u) %>% mutate(estimate = "standard")
-par_phy_cov_sum <- par_phy_cov_sum %>% as.data.frame() %>% distinct() %>% filter(median != u) %>% mutate(estimate = "partial")
+par_phy_cov_sum <- par_phy_cov %>% 
+  apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>%
+  t() %>% round(2) %>% magrittr::set_colnames(c("ll", "l", "median", "u", "uu"))
+phy_cov_sum <- phy_cov_sum %>% as.data.frame() %>% 
+  distinct() %>% filter(median != u) %>% mutate(estimate = "standard")
+par_phy_cov_sum <- par_phy_cov_sum %>% as.data.frame() %>% 
+  distinct() %>% filter(median != u) %>% mutate(estimate = "partial")
 phy_cov_sum <- phy_cov_sum %>% mutate(corr = rownames(phy_cov_sum)) %>% tibble()
 par_phy_cov_sum <- par_phy_cov_sum %>% mutate(corr = rownames(par_phy_cov_sum)) %>% tibble()
 phy_cor <- full_join(phy_cov_sum, par_phy_cov_sum, join_by(ll, l, median, u, uu, estimate, corr))
 
 # non-phylogenetic correlations
-ind_cov <- matrix(nrow = nrow(vcv), ncol = len_vcv);colnames(ind_cov) <- colnames(vcv)[(n_resp^2+1):length(colnames(vcv))]
-par_ind_cov<- matrix(nrow = nrow(vcv), ncol = len_vcv);colnames(par_ind_cov) <- colnames(vcv)[(n_resp^2+1):length(colnames(vcv))]
+ind_cov <- matrix(nrow = nrow(vcv), ncol = len_vcv)
+colnames(ind_cov) <- colnames(vcv)[(n_resp^2+1):length(colnames(vcv))]
+par_ind_cov<- matrix(nrow = nrow(vcv), ncol = len_vcv)
+colnames(par_ind_cov) <- colnames(vcv)[(n_resp^2+1):length(colnames(vcv))]
 for (i in 1:nrow(vcv)){
   cov <- vcv[i,]
   ind_vcv <- matrix(data = cov[(n_resp^2+1):length(colnames(vcv))],
@@ -904,11 +906,16 @@ for (i in 1:nrow(vcv)){
   par_ind_cov[i,] <- as.vector(par_mat)
 }
 ind_cov_sum <- ind_cov %>% 
-  apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>% t() %>% round(2) %>% 
+  apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>% 
+  t() %>% round(2) %>% 
   magrittr::set_colnames(c("ll", "l", "median", "u", "uu"))
-par_ind_cov_sum <- par_ind_cov %>% apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>% t() %>% round(2) %>% magrittr::set_colnames(c("ll", "l", "median", "u", "uu"))
-ind_cov_sum <- ind_cov_sum %>% as.data.frame() %>% distinct() %>% filter(median != u) %>% mutate(estimate = "standard")
-par_ind_cov_sum <- par_ind_cov_sum %>% as.data.frame() %>% distinct() %>% filter(median != u) %>% mutate(estimate = "partial")
+par_ind_cov_sum <- par_ind_cov %>% 
+  apply(2 , quantile , probs = c(0.025,0.25,0.50,0.75,0.975), na.rm = TRUE ) %>% 
+  t() %>% round(2) %>% magrittr::set_colnames(c("ll", "l", "median", "u", "uu"))
+ind_cov_sum <- ind_cov_sum %>% as.data.frame() %>% 
+  distinct() %>% filter(median != u) %>% mutate(estimate = "standard")
+par_ind_cov_sum <- par_ind_cov_sum %>% as.data.frame() %>% 
+  distinct() %>% filter(median != u) %>% mutate(estimate = "partial")
 ind_cov_sum <- ind_cov_sum %>% mutate(corr = rownames(ind_cov_sum)) %>% tibble()
 par_ind_cov_sum <- par_ind_cov_sum %>% mutate(corr = rownames(par_ind_cov_sum)) %>% tibble()
 ind_cor <- full_join(ind_cov_sum, par_ind_cov_sum, join_by(ll, l, median, u, uu, estimate, corr))
@@ -918,8 +925,13 @@ cor <- rbind(phy_cor, ind_cor)
 cor <- cor %>% 
   mutate(level = rep(c("phylogenetic","non-phylogenetic"), each = n_resp^2-n_resp),
          corr = gsub("trait","",corr),corr = gsub(".animal","",corr),
-         corr = gsub(".units","",corr),corr = gsub(":"," ~ ",corr),
-         corr = gsub("y1","x",corr),corr = gsub("y2","y",corr),corr = gsub("y3","z",corr))
+         corr = gsub(".units","",corr),corr = gsub(":"," ~ ",corr))
+
+```
+
+and plot
+
+```{r}
 
 ## PLOT
 cor %>% 
