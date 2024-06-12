@@ -146,9 +146,9 @@ C &=&
 &=&                
 \begin{pmatrix} 4 & 3 & 0 & 0 & 0 \\ 
                 3 & 4 & 0 & 0 & 0 \\
-                0 & 0 & 4 & 1 & 1 \\
-                0 & 0 & 1 & 4 & 2 \\
-                0 & 0 & 1 & 2 & 4 \\
+                0 & 0 & 4 & 2 & 1 \\
+                0 & 0 & 2 & 4 & 1 \\
+                0 & 0 & 1 & 1 & 4 \\
                 \end{pmatrix}
 
                 
@@ -162,9 +162,9 @@ In order to facilitate comparison between phylogenetic and independent contribut
 C_{cor} &=& 
 \begin{pmatrix} 1 & 0.75 & 0 & 0 & 0 \\ 
                 0.75 & 1 & 0 & 0 & 0 \\
-                0 & 0 & 1 & 0.25 & 0.25 \\
-                0 & 0 & 0.25 & 1 & 0.5 \\
-                0 & 0 & 0.25 & 0.5 & 1 \\
+                0 & 0 & 1 & 0.5 & 0.25 \\
+                0 & 0 & 0.5 & 1 & 0.25 \\
+                0 & 0 & 0.25 & 0.25 & 1 \\
                 \end{pmatrix}
 \end{eqnarray}\
 
