@@ -1,0 +1,227 @@
+---
+title: "PMM: model diagnostics"
+author: "Luke Yates"
+date: "24/01/2022"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse); 
+library(brms); 
+library(bayesplot); 
+library(knitr);
+library(ggpubr)
+knitr::opts_chunk$set(echo = TRUE)
+select <- dplyr::select
+```
+
+
+### Overview
+Here we illustrate various model checking techniques...
+
+### Load fitted model 
+The model has been fit to simulated data comprising two continuous response variables generated from a bi-variate Gaussian distribution with a between-response correlated residual error. The mean includes species-level random effects for each response, which are also correlated both between species (based on a scaled phylogenetic correlation matrix $A$) and between each response.
+```{r, warning=FALSE}
+fit <- readRDS("brms_bivariate_gaussian.rds")
+fit
+
+# time to fit (seconds): slowest chain of four
+rstan::get_elapsed_time(fit$fit) %>% apply(1,sum) %>% max
+
+# names of main model parameters
+pars <- fit %>% as_tibble %>% select(-starts_with("r_"),-"lp__") %>% names
+# names of random effects
+r_pars <- fit %>% as_tibble %>% select(starts_with("r_")) %>% names
+```
+
+### Convergence diagnostics
+Why we need to check convergence: proper posterior $\Rightarrow$ valid inference...  
+
+First we examine trace plots of the four chains for visual evidence of well-mixed posterior samples. These look good!
+```{r, warning=FALSE}
+mcmc_trace(fit, pars = pars)
+
+```
+Next we check the $\widehat{R}$ statistic for each parameter, these should be less than 1.1
+```{r, warning=FALSE}
+mcmc_rhat(rhat(fit, pars = pars))
+```
+  
+
+We should also check the $\widehat{R}$ values for all 100 of the random effects.
+```{r, warning=FALSE}
+mcmc_rhat(rhat(fit, pars = r_pars))
+```
+  
+
+Next we check the effective sample size for each parameter. A crude heuristic is that $N_{\mathrm{eff}}$ should be above 0.1.
+```{r, warning=FALSE}
+mcmc_neff(neff_ratio(fit, pars = pars))  
+```
+  
+
+Finally, Hamiltonian Monte Carlo methods permit additional diagnostics related to technical aspects of the sampling algorithm. These can be quickly checked and if there are issues, the stan documentation provides some strategies for tracking down the source of the problem---usually model misspecification. 
+```{r, warning=FALSE}
+rstan::check_hmc_diagnostics(fit$fit)
+```
+  
+
+Generally, a small percentage of divergent transitions is no cause for concern, but when other diagnostic indicate a problem, then these can be handy for troubleshooting. 
+
+
+### Posterior predictive checks
+Having established chain convergence, we now turn to model validation: determining if the model generates plausible data.
+
+Posterior predictive checks simulate new data by taking repeated parameter draws from the posterior and generating random simulations from the underlying (parametric) probability distributions. When random or group-level effects are included in the model, there are several ways to simulate new data depending on whether the random effects are included and if they are, whether prediction in conditional on the group level (within the existing set of levels in the fitted model)
+
+#### Include and condition on random-effect levels
+
+```{r, message=FALSE}
+ppA1 <- pp_check(fit, resp= "y1", type = "intervals") + labs(subtitle = "Response: y1")
+ppA2 <- pp_check(fit, resp= "y2", type = "intervals") + labs(subtitle = "Response: y2")
+ggarrange(ppA1, ppA2, nrow = 2, legend = "none") %>% 
+  annotate_figure(top = "PP-check: conditional on species-level random-intercept estimates")
+```
+  
+
+We can check the nominal coverage by calculate the proportion of data points included within the 50% and 90% credible intervals. 
+```{r}
+get_coverage <- function(data) data %>%
+  transmute(cov90 = (hh >= y_obs) & (ll <= y_obs),
+            cov50 = (h >= y_obs) & (l <= y_obs)) %>% 
+  map_dbl(sum)
+
+get_coverage(ppA1$data)
+get_coverage(ppA2$data)
+```
+
+#### Include random effects, but draw from the marginal distribution for each sample
+These simulations add the group-level variance to the residual variance with the mean predicted by the fixed effects only. 
+
+```{r, message=FALSE}
+ppB1 <- pp_check(fit, resp= "y1", type = "intervals", 
+         allow_new_levels = T, 
+         sample_new_levels = "gaussian",
+         newdata = fit$data %>% mutate(animal = NA)) + 
+  labs(subtitle = "Response: y1")
+
+ppB2 <- pp_check(fit, resp= "y2", type = "intervals", 
+                allow_new_levels = T, 
+                sample_new_levels = "gaussian",
+                newdata = fit$data %>% mutate(animal = NA)) + 
+  labs(subtitle = "Response: y2")
+
+ggarrange(ppB1, ppB2, nrow = 2, legend = "none") %>% 
+  annotate_figure(top = "PP-check: marginalised over Gaussian distribution of random effects")
+
+get_coverage(ppB1$data)
+get_coverage(ppB2$data)
+
+```
+
+
+#### Exclude random effects, predicting from the fixed effects only.
+These simulations ignore group-level variance, drawing only from the residual model with mean predicted by the fixed effects.
+
+```{r, message=FALSE}
+ppC1 <- pp_check(fit, resp= "y1", type = "intervals", re_formula = NA) + labs(subtitle = "Response: y1")
+ppC2 <- pp_check(fit, resp= "y2", type = "intervals", re_formula = NA) + labs(subtitle = "Response: y2")
+ggarrange(ppC1, ppC2, nrow = 2, legend = "none") %>% 
+  annotate_figure(top = "PP-check: fixed effects only (i.e., ignore random effects by setting them to zero)")
+
+get_coverage(ppC1$data)
+get_coverage(ppC2$data)
+```
+
+#### LOO-predictive plots
+
+```{r, cache=TRUE}
+# draw posterior samples
+ppred <- posterior_predict(fit)
+ppred1 <- ppred[,,1] # y1
+ppred2 <- ppred[,,2] # y2
+
+# compute importance sampling weights
+log_ratios1 <- -1*log_lik(fit, resp = "y1")
+log_ratios2 <- -1*log_lik(fit, resp = "y2")
+r_eff1 <- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 1000))
+r_eff2 <- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 1000))
+psis1 <- loo::psis(log_ratios1, cores = 10, r_eff = r_eff1)
+psis2 <- loo::psis(log_ratios2, cores = 10, r_eff = r_eff2)
+
+# generate loo quantile predictions via PSIS
+loo_pred1 <- loo::E_loo(ppred1,psis_object = psis1, log_ratios = log_ratios1, type = "quantile", 
+                        probs = c(0.05,0.25,0.5,0.75,0.95))
+loo_pred2 <- loo::E_loo(ppred2,psis_object = psis2, log_ratios = log_ratios2, type = "quantile", 
+           probs = c(0.05,0.25,0.5,0.75,0.95))
+
+# collate loo estimates
+loo_pred_probs1 <- loo_pred1$value %>% t %>% as.data.frame() %>% as_tibble()
+loo_pred_probs2 <- loo_pred2$value %>% t %>% as.data.frame() %>% as_tibble()
+colnames(loo_pred_probs1) <- colnames(loo_pred_probs2) <- c("ll","l","m","h","hh")
+
+# compute coverage
+cov1 <- loo_pred_probs1 %>% mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = fit$data$y1) %>% 
+  get_coverage()
+cov2 <- loo_pred_probs2 %>% mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = fit$data$y2) %>% 
+  get_coverage()
+
+# plot function
+plot_loo_pred <- function(x,y_obs,cov, ylab = "y") x %>%  
+  mutate(y_obs = y_obs) %>% 
+  arrange(m) %>% 
+  mutate(x = 1:n()) %>% 
+  ggplot(aes(x)) +
+  geom_linerange(aes(ymin = ll, ymax = hh), col = blues9[4]) +
+  geom_linerange(aes(ymin = l, ymax = h), size = 1, col = blues9[5]) +
+  geom_point(aes(y=m), shape = 21, size = 3, col = blues9[5], fill = blues9[2]) +
+  geom_point(aes(y = y_obs)) +
+  theme_classic() +
+  labs(y = ylab, subtitle = paste("Coverage: ", cov[1], "% at 90th quantile, ",cov[2],"% at 50th quantile"),
+       title = "LOO-predictive checks")
+
+# main plot
+ggarrange(plot_loo_pred(loo_pred_probs1, fit$data$y1, cov1, "y1"),
+          plot_loo_pred(loo_pred_probs2, fit$data$y2, cov2, "y2"),
+          ncol =1)
+
+
+
+```
+
+
+
+
+### Residual analysis
+Classical QQ plots can be used test the assumption of normality.
+```{r}
+pe1 <- predictive_error(fit, resp = "y1") %>% as.data.frame() %>% map_dbl(mean)
+pe2 <- predictive_error(fit, resp = "y2") %>% as.data.frame() %>% map_dbl(mean)
+
+tibble(r1 = pe1, r2 = pe2) %>% 
+  ggplot() + 
+  stat_qq(aes(sample = r1, col = "y1")) +
+  stat_qq(aes(sample = r2, col = "y2")) +
+  scale_colour_manual(values = c(blues9[4], blues9[8])) +
+  labs(col = "Response", subtitle = "QQ plots") +
+  theme_classic()
+```
+
+
+### Recovery of simulation parameters
+For simulated data, we can check the capacity of the fitted model to recover the original simulation parameters.
+```{r}
+x <- fit %>% as_tibble %>% select(-starts_with("r_"),-"lp__")
+true_values2 <- c(b_y1_Intercept = 1,
+                 b_y2_Intercept = 2,
+                 sd_animal__y1_Intercept = 2,
+                 sd_animal__y2_Intercept = 4, # sqrt needed here?
+                 cor_animal__y1_Intercept__y2_Intercept = 0.75,
+                 sigma_y1 = 1, # sqrt needed here?
+                 sigma_y2 = 2,
+                 rescor__y1__y2 = 0.25
+)
+identical(names(true_values2),names(x)) # check order of parameters match
+mcmc_recover_hist(x, true_values2) # plot
+```
