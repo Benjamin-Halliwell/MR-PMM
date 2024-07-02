@@ -104,7 +104,9 @@ num_traits <- traits # we will focus on the numerical leaf traits initially
 euc_data <- euc_data %>% 
   filter(trait_name %in% traits,
          basis_of_record %in% c("field", "captive_cultivated", "literature", "preserved_specimen"),
-         life_stage == "adult") %>% 
+         # !location_name %in% c("Currency Creek Arboretum",
+         #                       "Currency Creek Arboretum, South Australia"), # exclude records from CCA?
+         life_stage == "adult",) %>% 
   mutate(replicates = ifelse(replicates == "unknown" | replicates == "1-10", 1,
                       ifelse(replicates == "2-17", 2,
                       ifelse(replicates == "3-5", 3,
@@ -120,9 +122,9 @@ euc_data %>% select(basis_of_record) %>% table()
 
 # select only the columns we need and create a unique id for each record
 euc_data <- euc_data %>% 
-  select(dataset_id, observation_id, taxon_name, trait_name, value_type, value, replicates) %>% 
+  select(dataset_id, location_name, observation_id, taxon_name, trait_name, value_type, value, replicates) %>% 
   distinct() %>%
-  mutate(n = 1:n(), .by = c(dataset_id, observation_id, taxon_name, trait_name),
+  mutate(n = 1:n(), .by = c(dataset_id, location_name, observation_id, taxon_name, trait_name),
          id = paste0(dataset_id,"_",observation_id,"_",n), .before = dataset_id) %>% # create unique observation id
   select(-n)
 
@@ -681,6 +683,29 @@ quantile(fit_meta$VCV[,"traitd13C:traitd13C.phylo"] /
 # large variation between studies in the range of d13C values reported. Two potential explanations are  
 # 1) taxonomic bias in species included within each study, and 2) differences in measurement technique.
 dat_meta %>% ggplot(aes(x = dataset_id, y = d13C)) + geom_point() + theme_classic() + theme(axis.text.x = element_blank())
+
+```
+
+
+# Distributional Model
+
+```{r, eval = F}
+
+# define phylogenetic correlation matrix
+C <- vcv.phylo(phy, corr = T)
+
+# define model formula
+bf.1 <- bf(LMA | mi() ~ 1 + (1|a|gr(phylo, cov = C)) + (1|taxon) + (1|b|dataset_id)) +
+        bf(sigma      ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|dataset_id))
+
+b.dist <- brm(bf.1,
+           data   = dat_meta,
+           family = gaussian(), 
+           data2  = list(C = C),
+           control = list(adapt_delta = 0.99, max_treedepth = 16),
+           cores  = 4, 
+           chains = 4
+)
 
 
 ```
