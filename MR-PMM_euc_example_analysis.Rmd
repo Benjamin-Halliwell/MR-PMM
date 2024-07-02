@@ -22,7 +22,7 @@ $\color{orange}{\text{N.B. This tutorial is a live document that will continue t
 
 # Introduction
 
-In this tutorial we will use the AusTraits database [@falster2021austraits] to explore the benefits of multi-response phylogenetic mixed models (MR-PMM). AusTraits is a relational database containing records of ~500 plant traits across ~30,000 Australian plant taxa (https://austraits.org/). The first step is to install and load any required packages, then load in the AusTraits data. For reproducibility, all analyses will use version 4.2.0 of AusTraits (https://zenodo.org/records/8353840). This tutorial is currently set up for users to download the relevant files directly from GitHub and inspect outputs of each code chunk within Rstudio on their local machine.
+In this tutorial we will use the AusTraits database [@falster2021austraits] to explore the benefits of multi-response phylogenetic mixed models (MR-PMM). AusTraits is a relational database containing records of ~500 plant traits across ~30,000 Australian plant taxa (https://austraits.org/). The first step is to install and load any required packages, then load in the AusTraits data. For reproducibility, all analyses will use version 6.0.0 of AusTraits (https://zenodo.org/records/11188867). This tutorial is currently set up for users to download the relevant files directly from GitHub and inspect outputs of each code chunk within Rstudio on their local machine.
 
 
 ```{r setup, include=FALSE, eval = T}
@@ -55,7 +55,7 @@ library(ggpubr)
 library(purrr)
 
 # load in austraits database
-austraits <- readRDS("austraits-4.2.0.rds")
+austraits <- readRDS("austraits-6.0.0.rds")
 
 # load in model fits
 fit_MR <- readRDS(file = "fit_MR.rds")
@@ -183,8 +183,7 @@ euc_data <- euc_data %>%
          taxon_sp = gsub('^([^_]+_[^_]+).*', "\\1",taxon))  # remove everything after the second "_", (removes subsp epithet)
 
 # quick check that the re-naming worked as intended
-tail(phy$tip.label)
-euc_data %>% pull(taxon) %>% unique() %>% tail()
+euc_data %>% select(taxon, taxon_sp) %>% unique() %>% tail()
 
 ```
 
@@ -197,17 +196,18 @@ Now we have resolved the nomenclature, we can check which and how many taxa in t
 # check how many species with trait data are also in the phylogeny
 match <- euc_data %>% 
   filter(trait_name %in% traits) %>% 
-  pull(taxon) %>% intersect(phy$tip.label);length(match) # we have data on at least one leaf trait for 422 taxa
+  pull(taxon) %>% intersect(phy$tip.label);length(match) # we have data on at least one leaf trait for 421 taxa
 
-# check how many if we drop the subsp epithet off both the tip.labels of the phylogeny and the taxon names in the data
+# check how many if we drop the subsp epithet off both the tip.labels of 
+# the phylogeny and the taxon names in the data
 match_sp <- euc_data %>% 
   filter(trait_name %in% traits) %>% 
   pull(taxon_sp) %>% # subsp epithet dropped
-  intersect(gsub('^([^_]+_[^_]+).*', "\\1", phy$tip.label)); length(match_sp) # increases to 458 taxa by ignoring subspecies nomenclature
+  intersect(gsub('^([^_]+_[^_]+).*', "\\1", phy$tip.label)); length(match_sp) # increases to 457 taxa by ignoring subspecies nomenclature
 
 # and adds almost 2000 records across the three traits (~25% increase in sample size)
-euc_data %>% filter(taxon %in% match, trait_name %in% traits) %>% select(value) %>% na.omit() %>% nrow() # retaining subsp identity
-euc_data %>% filter(taxon_sp %in% match_sp, trait_name %in% traits) %>% select(value) %>% na.omit() %>% nrow() # removing subsp identity
+euc_data %>% filter(taxon %in% match, trait_name %in% traits) %>% select(value) %>% na.omit() %>% nrow()
+euc_data %>% filter(taxon_sp %in% match_sp, trait_name %in% traits) %>% select(value) %>% na.omit() %>% nrow()
 
 # One thing to check is that we will not create duplicate tip labels in the phylogeny by dropping subsp epithets.
 # This would happen if the phylogeny featured multiple subsp for any given species. To confirm this, we can check 
@@ -256,13 +256,10 @@ euc_wide %>% select(all_of(traits)) %>% summarise_all(~ sum((!is.na(.))))
 # we can also calculate the number of observations for each trait for each taxon
 data_coverage <- euc_wide %>% group_by(taxon) %>% summarise(across(all_of(traits),~ sum(!is.na(.))));data_coverage %>% head()
 
-# We have many missing values (e.g., 78% of observations do not report values for d13C)
+# We have many missing values (e.g., ~78% of observations do not report values for d13C)
 euc_wide %>% select(all_of(traits)) %>% summarise_all(~ sum((!is.na(.)))) %>% `/`(nrow(euc_wide)) %>% round(3)
 
-# however this is due to the fact that many studies that report LMA do not report our other leaf traits, e.g.,
-euc_wide %>% head()
-
-# the proportion of taxa reporting at least one observation for each trait is actually much higher
+# However, the proportion of taxa reporting at least one observation for each trait is actually much higher
 data_coverage %>% mutate(across(all_of(traits), ~ ifelse(.>0,1,0))) %>% select(-1) %>% colSums() %>% `/`(Ntip(phy)) %>% round(2)
 
 ```
@@ -352,18 +349,16 @@ taxonomy <- read.csv("Classification-Of-The-Eucalypts-Nicolle-2022.csv") # load 
 dat_mean$subgenus <- taxonomy[match(dat_mean$taxon, taxonomy$BINOMIAL),]$SUBGENUS # match each taxa to subgenus
 
 # filter to complete cases
-dat_cc <- dat_mean %>% select(taxon, subgenus, N_mass, d13C, LMA) %>% na.omit() %>% 
-  filter(subgenus %in% c("Eucalyptus", "Eudesmia", "Symphyomyrtus"))
+dat_cc <- dat_mean %>% select(taxon, subgenus, N_mass, d13C, LMA) %>% drop_na() %>% 
+  filter(subgenus %in% c("Eucalyptus", "Eudesmia", "Symphyomyrtus"),
+         !(!is.na(LMA) & LMA > 3) & !(!is.na(N_mass) & N_mass < -4)) # remove outliers for plotting
 sg_cols <- c("#E69F00","#009E73", "#56B4E9")
 X <- dat_cc %>% select(N_mass, d13C, LMA) %>% as.matrix()
 rownames(X) <- dat_cc %>% pull(taxon)
 phy_cc <- keep.tip(phy, dat_cc %>% pull(taxon))
 
-# scatter-plot
-dat_cc %>% select(N_mass, LMA) %>% plot()
-dat_cc <- dat_cc %>% filter(!(!is.na(LMA) & LMA > 3) & !(!is.na(N_mass) & N_mass < -4)) # remove outliers
 
-# re-plot
+# scatter-plot
 dat_cc %>% ggplot(aes(N_mass, LMA, color = subgenus)) + geom_point(size=2) + 
   theme_classic() + theme(axis.text = element_text(size=15)) + guides(color="none") + scale_color_manual(values=sg_cols)
 dat_cc %>% ggplot(aes(d13C, LMA, color = subgenus)) + geom_point(size=2) +
@@ -416,7 +411,7 @@ fit_LAMBDA <- dat_PGLS %>% phylolm(d13C ~ N_mass, ., phy, model = "lambda"); fit
 # once we account for phylogeny the relationship disappears
 dat_mean %>% select(N_mass, d13C) %>% plot()
 fit_OLS %>% abline(col="blue");fit_PGLS %>% abline(col="red");fit_LAMBDA %>% abline(col="purple")
-legend(1.35, -3.15, legend=c("OLS", expression("PGLS"[lambda]), "PGLS"), fill = c("blue","purple","red"))
+legend(-4.25, 2.5, legend=c("OLS", expression("PGLS"[lambda]), "PGLS"), fill = c("blue","purple","red"))
 
 ```
 
@@ -529,31 +524,103 @@ For greater control over plotting, we can make our own versions of such plots in
 
 ```{r, eval = F}
 
-# bind together 5-point summaries, only taking rows reporting correlations
-cbind(data.frame(trait_pair=rep(c("N_mass:d13C", "N_mass:LMA", "d13C:LMA"), each = 2)),
-      rbind(mrpmm_cor(fit_MR, "N_mass", "d13C", "phylo", "units", summary = T)[3:4,],
-            mrpmm_cor(fit_MR, "N_mass", "LMA", "phylo", "units", summary = T)[3:4,],
-            mrpmm_cor(fit_MR, "d13C",   "LMA", "phylo", "units", summary = T)[3:4,])) %>% 
-  ggplot(aes(x = trait_pair, y = `50%`, col = parameter)) +
-  geom_hline(yintercept=0, linetype="dashed") +
-  geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), 
-                width = 0, position = position_dodge(width = 0.4)) +
-  geom_errorbar(aes(ymin = `25%`, ymax = `75%`), 
-                size = 1.5, width = 0, position = position_dodge(width = 0.4)) +
-  geom_point(size = 3, position = position_dodge(width = 0.4)) +
-  theme_classic() + 
-  theme(axis.text = element_text(size=12),
-        axis.title.x = element_text(size=14),
-        legend.text = element_text(size=12),
-        legend.title = element_text(size=14)) +
-  coord_flip() + ylim(-1,1) +
-  xlab("") + ylab("estimate") + guides(color=guide_legend("correlation")) +
-  scale_color_manual(labels = c("non-phylogenetic", "phylogenetic"), values = c("red", blues9[7])) +
-  scale_x_discrete(labels = c("N_mass:d13C" = bquote(N[mass]~"~"~delta^13*C),
-                              "N_mass:LMA" = bquote(N[mass]~"~"~"LMA"),
-                              "d13C:LMA" = bquote(delta^13*C~"~"~"LMA")))
+# set ggplot theme
+theme_set(theme_classic())
 
-# Q. What can we conclude about the relationship between LA and LMA?
+# extract samples
+mrpmm_cor(fit_MR, "N_mass", "d13C", "phylo", "units", summary = T)
+mod_res <- cbind(cbind(mrpmm_cor(fit_MR, "N_mass", "d13C", "phylo", "units")[,3:4],
+                       mrpmm_cor(fit_MR, "N_mass", "LMA", "phylo", "units")[,3:4],
+                       mrpmm_cor(fit_MR, "d13C",   "LMA", "phylo", "units")[,3:4]))
+names(mod_res) <- c("N_mass:d13C_phy","N_mass:d13C_ind","N_mass:LMA_phy","N_mass:LMA_ind","d13C:LMA_phy","d13C:LMA_ind")
+
+p1 <- mod_res %>%
+  as_tibble %>% 
+  mutate(.chain = 1, .iteration = 1:nrow(fit_MR$Sol), .draw = 1:nrow(fit_MR$Sol)) %>% 
+  pivot_longer(1:6, names_to = "parameter", values_to = "estimate") %>%
+  mutate(level = ifelse(str_detect(parameter, "_phy"), "phylogeneitc", "residual"),
+         parameter = str_replace(parameter, "_phy", ""),
+         parameter = str_replace(parameter, "_ind", "")) %>% 
+  ggplot(aes(x = estimate, 
+             y = factor(parameter, levels=c("N_mass:LMA","d13C:LMA","N_mass:d13C")))) +
+  stat_halfeye(aes(col = level, fill = level), 
+               position = position_dodge(width = 0.4), 
+               slab_alpha = 0.5, 
+               fatten_point = 3) +
+  geom_vline(xintercept=0, linetype="dashed") +
+    theme(axis.text = element_text(size=14),
+        axis.title.x = element_text(size=16),
+        legend.text = element_text(size=14),
+        legend.title = element_text(size=16)) +
+  xlim(-1,1) +
+  ylab("") + guides(color="none") +
+  scale_color_manual(values=c("#0099FF", "#FF9900")) +
+  scale_fill_manual(values=c( "#0099FF", "#FF9900")) +
+  scale_y_discrete(labels = c("N_mass:d13C" = bquote(N[mass]*","~delta^13*C),
+                              "N_mass:LMA" = bquote("LMA"*","~N[mass]),
+                              "d13C:LMA" = bquote("LMA"*","~delta^13*C)))
+p1  
+
+# decompose variance for each trait
+data_stack <- data.frame(
+    trait = rep(c("LMA","N_mass","d13C"), each=2),
+    level = rep(c("phylogenetic","residual"),3),
+    post_mode = c(posterior.mode(fit_MR$VCV[,"traitLMA:traitLMA.phylo"] / 
+                (fit_MR$VCV[,"traitLMA:traitLMA.phylo"] + fit_MR$VCV[,"traitLMA:traitLMA.units"])),
+                1 - posterior.mode(fit_MR$VCV[,"traitLMA:traitLMA.phylo"] / 
+                (fit_MR$VCV[,"traitLMA:traitLMA.phylo"] + fit_MR$VCV[,"traitLMA:traitLMA.units"])),
+                posterior.mode(fit_MR$VCV[,"traitN_mass:traitN_mass.phylo"] / 
+                (fit_MR$VCV[,"traitN_mass:traitN_mass.phylo"] + fit_MR$VCV[,"traitN_mass:traitN_mass.units"])),
+                1 - posterior.mode(fit_MR$VCV[,"traitN_mass:traitN_mass.phylo"] / 
+                (fit_MR$VCV[,"traitN_mass:traitN_mass.phylo"] + fit_MR$VCV[,"traitN_mass:traitN_mass.units"])),
+                posterior.mode(fit_MR$VCV[,"traitd13C:traitd13C.phylo"] / 
+                (fit_MR$VCV[,"traitd13C:traitd13C.phylo"] + fit_MR$VCV[,"traitd13C:traitd13C.units"])),
+                1- posterior.mode(fit_MR$VCV[,"traitd13C:traitd13C.phylo"] / 
+                (fit_MR$VCV[,"traitd13C:traitd13C.phylo"] + fit_MR$VCV[,"traitd13C:traitd13C.units"])))
+)
+
+# stacked bar graph
+p2 <- ggplot(data_stack, aes(fill=level, y=post_mode, x=factor(trait, levels=c("LMA","N_mass","d13C")))) + 
+    geom_bar(position="fill", stat="identity") +
+    scale_fill_manual(values=c("#0099FF", "#FF9900")) +
+    theme(axis.text.x = element_text(size=14),
+          axis.text.y = element_text(size=12),
+          axis.title.y = element_text(size=14),
+          plot.margin = margin(0,2,0,0, "cm")) +
+    ylab("proportion of variance explained") + xlab("") + 
+    scale_x_discrete(labels = c("N_mass" = bquote(N[mass]),
+                              "d13C" = bquote(delta^13*C)))
+p2
+
+# plot together in panel
+ggarrange(p2, p1, common.legend = T)
+
+
+# # bind together 5-point summaries, only taking rows reporting correlations
+# cbind(data.frame(trait_pair=rep(c("N_mass:d13C", "N_mass:LMA", "d13C:LMA"), each = 2)),
+#       rbind(mrpmm_cor(fit_MR, "N_mass", "d13C", "phylo", "units", summary = T)[3:4,],
+#             mrpmm_cor(fit_MR, "N_mass", "LMA", "phylo", "units", summary = T)[3:4,],
+#             mrpmm_cor(fit_MR, "d13C",   "LMA", "phylo", "units", summary = T)[3:4,])) %>% 
+#   ggplot(aes(x = trait_pair, y = `50%`, col = parameter)) +
+#   geom_hline(yintercept=0, linetype="dashed") +
+#   geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), 
+#                 width = 0, position = position_dodge(width = 0.4)) +
+#   geom_errorbar(aes(ymin = `25%`, ymax = `75%`), 
+#                 size = 1.5, width = 0, position = position_dodge(width = 0.4)) +
+#   geom_point(size = 3, position = position_dodge(width = 0.4)) +
+#   theme_classic() + 
+#   theme(axis.text = element_text(size=12),
+#         axis.title.x = element_text(size=14),
+#         legend.text = element_text(size=12),
+#         legend.title = element_text(size=14)) +
+#   coord_flip() + ylim(-1,1) +
+#   xlab("") + ylab("estimate") + guides(color=guide_legend("correlation")) +
+#   scale_color_manual(labels = c("non-phylogenetic", "phylogenetic"), values = c("red", blues9[7])) +
+#   scale_x_discrete(labels = c("N_mass:d13C" = bquote(N[mass]~"~"~delta^13*C),
+#                               "N_mass:LMA" = bquote(N[mass]~"~"~"LMA"),
+#                               "d13C:LMA" = bquote(delta^13*C~"~"~"LMA")))
+# 
+# # Q. What can we conclude about the relationship between LA and LMA?
   
 ```
 
@@ -567,34 +634,24 @@ The models so far have used the simplified data set of species mean trait values
 
 # only keep rows with data for at least one of the leaf traits (filter out rows with data for none)
 dat_meta <- dat %>%
-  filter(!(is.na(dat$d13C) & is.na(dat$N_mass) & is.na(dat$LMA)), N_mass > -3) %>% 
+  filter(!(is.na(dat$d13C) & is.na(dat$N_mass) & is.na(dat$LMA))) %>%
   select(id,dataset_id,taxon,phylo,d13C,N_mass,LMA,replicates)
 
-# Plot observation level data and confirm we get the same results from OLS when using species mean trait values
-dat_meta %>% select(N_mass,d13C) %>% plot()
-dat_meta %>% select(N_mass,d13C) %>% na.omit() %>% lm() %>% summary() 
-dat_meta %>% select(N_mass,d13C) %>% na.omit() %>% lm() %>% abline(col="blue")
-# Q. How does the slope estimate compare to the previous OLS on species mean trait values?
-
-## weights for meta-analysis
-# In order to propagate the uncertainty associated with each observation into the model, we can compute 
-# inverse weights as 1/replicates and pass these into MCMCglmm as measurement error variances (mev) 
-# N.B. this is not strictly correct (there is a scale issue, hence we use 0.1/replicates) but provides 
-# a work around for not being able to pass weights directly to MCMCglmm
-inv_weights <- dat_meta %>% mutate(inv_weights=0.1/as.numeric(replicates)) %>% pull(inv_weights)
+# duplicate each row according to number of replicates, effectively weighting observations by level of replication
+dat_meta <- dat_meta %>% uncount(replicates)
 
 # fit multilevel meta-analytic model
 C <- inverseA(phy)$Ainv # inverse phylogenetic covariance matrix
 p_meta <- list(R = list(V=diag(3),nu=3),
-               G = list(G1=list(V=diag(3), nu=3),
-                        G2=list(V=diag(3), nu=3),
-                        G3=list(V=diag(3), nu=3)))
+               G = list(G1=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3)),
+                        G2=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3)),
+                        G3=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3))))
 fit_meta <- MCMCglmm(cbind(N_mass, d13C, LMA) ~ trait-1,
                      random   = ~us(trait):phylo + # phylo 
                                  us(trait):taxon + # non-phylo 
                                  idh(trait):dataset_id, # between-study
                      rcov     = ~idh(trait):units, # within-study (i.e., residual errors)
-                     mev      = c(inv_weights, inv_weights, inv_weights), # inverse weights used in place of sampling variances
+                     # mev      = c(inv_weights, inv_weights, inv_weights), # inverse weights used for sampling variances
                      ginv     = list(phylo = C),
                      family   = c("gaussian","gaussian","gaussian"),
                      nitt     = 25000,
@@ -625,7 +682,140 @@ quantile(fit_meta$VCV[,"traitd13C:traitd13C.phylo"] /
 # 1) taxonomic bias in species included within each study, and 2) differences in measurement technique.
 dat_meta %>% ggplot(aes(x = dataset_id, y = d13C)) + geom_point() + theme_classic() + theme(axis.text.x = element_blank())
 
+
 ```
+
+
+## Plotting
+
+Now to replicate plots using the multilevel model fit
+
+```{r, eval = F}
+
+# extract samples from multilevel model
+mod_res <- cbind(cbind(mrpmm_cor(fit_meta, "N_mass", "d13C", "phylo", "taxon")[,3:4],
+                       mrpmm_cor(fit_meta, "N_mass", "LMA", "phylo", "taxon")[,3:4],
+                       mrpmm_cor(fit_meta, "d13C",   "LMA", "phylo", "taxon")[,3:4]))
+names(mod_res) <- c("N_mass:d13C_phy","N_mass:d13C_ind","N_mass:LMA_phy","N_mass:LMA_ind","d13C:LMA_phy","d13C:LMA_ind")
+
+p1 <- mod_res %>%
+  as_tibble %>% 
+  mutate(.chain = 1, .iteration = 1:nrow(fit_MR$Sol), .draw = 1:nrow(fit_MR$Sol)) %>% 
+  pivot_longer(1:6, names_to = "parameter", values_to = "estimate") %>%
+  mutate(level = ifelse(str_detect(parameter, "_phy"), "phylogeneitc", "residual"),
+         parameter = str_replace(parameter, "_phy", ""),
+         parameter = str_replace(parameter, "_ind", "")) %>% 
+  ggplot(aes(x = estimate, 
+             y = factor(parameter, levels=c("N_mass:LMA","d13C:LMA","N_mass:d13C")))) +
+  stat_halfeye(aes(col = level, fill = level), 
+               position = position_dodge(width = 0.4), 
+               slab_alpha = 0.5, 
+               fatten_point = 3) +
+  geom_vline(xintercept=0, linetype="dashed") +
+    theme(axis.text = element_text(size=12),
+        axis.title.x = element_text(size=16),
+        legend.text = element_text(size=14),
+        legend.title = element_text(size=16),
+        plot.margin = margin(0.2,0.2,0.2,0.2, "cm")) +
+  xlim(-1,1) +
+  ylab("") + guides(color="none") +
+  scale_color_manual(values=c("#003F5C", "#955196")) +
+  scale_fill_manual(values=c( "#003F5C", "#955196")) +
+  scale_y_discrete(labels = c("N_mass:d13C" = bquote(N[mass]*","~delta^13*C),
+                              "N_mass:LMA" = bquote("LMA"*","~N[mass]),
+                              "d13C:LMA" = bquote("LMA"*","~delta^13*C)))
+p1  
+
+# decompose variance for each trait
+
+
+# calculate total variance for each trait
+LMA_var <- fit_meta$VCV[,"traitLMA:traitLMA.phylo"] + 
+           fit_meta$VCV[,"traitLMA:traitLMA.taxon"] +
+           fit_meta$VCV[,"traitLMA.dataset_id"] +
+           fit_meta$VCV[,"traitLMA.units"]
+N_mass_var <- fit_meta$VCV[,"traitN_mass:traitN_mass.phylo"] + 
+           fit_meta$VCV[,"traitN_mass:traitN_mass.taxon"] +
+           fit_meta$VCV[,"traitN_mass.dataset_id"] +
+           fit_meta$VCV[,"traitN_mass.units"]
+d13C_var <- fit_meta$VCV[,"traitd13C:traitd13C.phylo"] + 
+           fit_meta$VCV[,"traitd13C:traitd13C.taxon"] +
+           fit_meta$VCV[,"traitd13C.dataset_id"] +
+           fit_meta$VCV[,"traitd13C.units"]
+
+data_stack <- data.frame(
+    trait = rep(c("LMA","N_mass","d13C"), each=4),
+    level = rep(c("phylogenetic","between-species","between-study","residual"),3),
+    post_mode = c(mean(fit_meta$VCV[,"traitLMA:traitLMA.phylo"]/LMA_var),
+                  mean(fit_meta$VCV[,"traitLMA:traitLMA.taxon"]/LMA_var),
+                  mean(fit_meta$VCV[,"traitLMA.dataset_id"]/LMA_var),
+                  mean(fit_meta$VCV[,"traitLMA.units"]/LMA_var),
+                  mean(fit_meta$VCV[,"traitN_mass:traitN_mass.phylo"]/N_mass_var),
+                  mean(fit_meta$VCV[,"traitN_mass:traitN_mass.taxon"]/N_mass_var),
+                  mean(fit_meta$VCV[,"traitN_mass.dataset_id"]/N_mass_var),
+                  mean(fit_meta$VCV[,"traitN_mass.units"]/N_mass_var),
+                  mean(fit_meta$VCV[,"traitd13C:traitd13C.phylo"]/d13C_var),
+                  mean(fit_meta$VCV[,"traitd13C:traitd13C.taxon"]/d13C_var),
+                  mean(fit_meta$VCV[,"traitd13C.dataset_id"]/d13C_var),
+                  mean(fit_meta$VCV[,"traitd13C.units"]/d13C_var))
+)
+
+# stacked bar graph
+p2 <- ggplot(data_stack %>% 
+               mutate(post_mode = round(post_mode,2), 
+                      post_mode = ifelse(trait == "LMA" & level == "between-study",0.05,post_mode),
+                      post_mode = ifelse(trait == "LMA" & level == "between-species",0.11,post_mode)), # deal with rounding error
+             aes(x = factor(trait, levels=c("LMA","N_mass","d13C")),
+                 y = post_mode, 
+                 fill = factor(level, 
+                               levels=c("phylogenetic","between-species","between-study","residual")),
+                 label = post_mode)) + 
+    geom_bar(position="fill", stat="identity") +
+    geom_text(col="white", size = 4, position = position_stack(vjust = 0.5)) +
+    scale_fill_manual(values=c("#003f5c","#955196","#ef5675","#FFA600")) +
+    guides(fill=guide_legend("level")) +
+    theme(axis.text.x = element_text(size=14),
+          axis.text.y = element_blank(),
+          axis.title.y = element_text(size=14),
+          plot.margin = margin(0.2,1.5,0.2,0.2, "cm")) +
+    ylab("proportion of variance explained") + xlab("") + 
+    scale_x_discrete(labels = c("N_mass" = bquote(N[mass]),
+                              "d13C" = bquote(delta^13*C)))
+p2
+
+# plot together in panel
+ggarrange(p2, p1, widths = c(0.45,0.55), common.legend = T)
+
+
+# # bind together 5-point summaries, only taking rows reporting correlations
+# cbind(data.frame(trait_pair=rep(c("N_mass:d13C", "N_mass:LMA", "d13C:LMA"), each = 2)),
+#       rbind(mrpmm_cor(fit_MR, "N_mass", "d13C", "phylo", "units", summary = T)[3:4,],
+#             mrpmm_cor(fit_MR, "N_mass", "LMA", "phylo", "units", summary = T)[3:4,],
+#             mrpmm_cor(fit_MR, "d13C",   "LMA", "phylo", "units", summary = T)[3:4,])) %>% 
+#   ggplot(aes(x = trait_pair, y = `50%`, col = parameter)) +
+#   geom_hline(yintercept=0, linetype="dashed") +
+#   geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), 
+#                 width = 0, position = position_dodge(width = 0.4)) +
+#   geom_errorbar(aes(ymin = `25%`, ymax = `75%`), 
+#                 size = 1.5, width = 0, position = position_dodge(width = 0.4)) +
+#   geom_point(size = 3, position = position_dodge(width = 0.4)) +
+#   theme_classic() + 
+#   theme(axis.text = element_text(size=12),
+#         axis.title.x = element_text(size=14),
+#         legend.text = element_text(size=12),
+#         legend.title = element_text(size=14)) +
+#   coord_flip() + ylim(-1,1) +
+#   xlab("") + ylab("estimate") + guides(color=guide_legend("correlation")) +
+#   scale_color_manual(labels = c("non-phylogenetic", "phylogenetic"), values = c("red", blues9[7])) +
+#   scale_x_discrete(labels = c("N_mass:d13C" = bquote(N[mass]~"~"~delta^13*C),
+#                               "N_mass:LMA" = bquote(N[mass]~"~"~"LMA"),
+#                               "d13C:LMA" = bquote(delta^13*C~"~"~"LMA")))
+# 
+# # Q. What can we conclude about the relationship between LA and LMA?
+  
+```
+
+
 
 
 ## Model Validation
