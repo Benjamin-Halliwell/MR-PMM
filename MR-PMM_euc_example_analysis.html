@@ -1326,7 +1326,6 @@ if (window.hljs) {
 div.csl-bib-body { }
 div.csl-entry {
 clear: both;
-margin-bottom: 0em;
 }
 .hanging div.csl-entry {
 margin-left:2em;
@@ -1530,10 +1529,12 @@ multi-response phylogenetic mixed models (MR-PMM). AusTraits is a
 relational database containing records of ~500 plant traits across
 ~30,000 Australian plant taxa (<a href="https://austraits.org/" class="uri">https://austraits.org/</a>). The first step is to install
 and load any required packages, then load in the AusTraits data. For
-reproducibility, all analyses will use version 4.2.0 of AusTraits (<a href="https://zenodo.org/records/8353840" class="uri">https://zenodo.org/records/8353840</a>). This tutorial is
+reproducibility, all analyses will use version 6.0.0 of AusTraits (<a href="https://zenodo.org/records/11188867" class="uri">https://zenodo.org/records/11188867</a>). This tutorial is
 currently set up for users to download the relevant files directly from
 GitHub and inspect outputs of each code chunk within Rstudio on their
 local machine.</p>
+<p><br />
+</p>
 </div>
 <div id="data-cleaning-and-manipulation" class="section level1">
 <h1>Data cleaning and manipulation</h1>
@@ -1557,8 +1558,6 @@ euc_data %&gt;% head() # first few rows
 euc_data %&gt;% names() # column names
 euc_data %&gt;% select(trait_name) %&gt;% unique() # traits
 euc_data %&gt;% select(basis_of_record) %&gt;% unique() # types of records</code></pre>
-<p><br />
-</p>
 <p>We will focus on three continuous traits relevant to leaf economics
 and water use efficiency: <code>leaf_mass_per_area</code> (LMA),
 <code>leaf_N_per_dry_mass</code> (N_mass) and <code>leaf_delta13C</code>
@@ -1598,7 +1597,9 @@ num_traits &lt;- traits # we will focus on the numerical leaf traits initially
 euc_data &lt;- euc_data %&gt;% 
   filter(trait_name %in% traits,
          basis_of_record %in% c(&quot;field&quot;, &quot;captive_cultivated&quot;, &quot;literature&quot;, &quot;preserved_specimen&quot;),
-         life_stage == &quot;adult&quot;) %&gt;% 
+         # !location_name %in% c(&quot;Currency Creek Arboretum&quot;,
+         #                       &quot;Currency Creek Arboretum, South Australia&quot;), # exclude records from CCA?
+         life_stage == &quot;adult&quot;,) %&gt;% 
   mutate(replicates = ifelse(replicates == &quot;unknown&quot; | replicates == &quot;1-10&quot;, 1,
                       ifelse(replicates == &quot;2-17&quot;, 2,
                       ifelse(replicates == &quot;3-5&quot;, 3,
@@ -1614,15 +1615,15 @@ euc_data %&gt;% select(basis_of_record) %&gt;% table()
 
 # select only the columns we need and create a unique id for each record
 euc_data &lt;- euc_data %&gt;% 
-  select(dataset_id, observation_id, taxon_name, trait_name, value_type, value, replicates) %&gt;% 
+  select(dataset_id, location_name, observation_id, taxon_name, trait_name, value_type, value, replicates) %&gt;% 
   distinct() %&gt;%
-  mutate(n = 1:n(), .by = c(dataset_id, observation_id, taxon_name, trait_name),
+  mutate(n = 1:n(), .by = c(dataset_id, location_name, observation_id, taxon_name, trait_name),
          id = paste0(dataset_id,&quot;_&quot;,observation_id,&quot;_&quot;,n), .before = dataset_id) %&gt;% # create unique observation id
   select(-n)</code></pre>
 <p><br />
 </p>
-<div id="phylogeny" class="section level2">
-<h2>Phylogeny</h2>
+<div id="phylogeny" class="section level3">
+<h3>Phylogeny</h3>
 <p>After our initial refinement of records to include, the next step is
 to match the nomenclature (species naming conventions) between our trait
 data and the tip labels of our phylogenetic tree. We will use the
@@ -1635,7 +1636,7 @@ be binary (fully bifurcating with no polytomies) and ultrametric
 perform these checks and amend the tree where necessary.</p>
 <pre class="r"><code># read in Eucalypt phylogeny
 phy &lt;- read.tree(file=&quot;tree.ML1.tre&quot;)
-plot(phy, show.tip.label = F) # looks ultrametric
+plot(phy, edge.width = 1, show.tip.label = F) # looks ultrametric
 
 # perform checks
 is.binary(phy);is.ultrametric(phy) # but fails both tests
@@ -1649,8 +1650,8 @@ is.binary(phy);is.ultrametric(phy) # now passes checks</code></pre>
 <p><br />
 </p>
 </div>
-<div id="nomenclature" class="section level2">
-<h2>Nomenclature</h2>
+<div id="nomenclature" class="section level3">
+<h3>Nomenclature</h3>
 <p>Now the tree is in the right shape we can go about cleaning and
 matching the nomenclature. A quick preview of taxon names reveals a few
 differences between our data and the tip labels of our tree. We can
@@ -1690,38 +1691,129 @@ euc_data &lt;- euc_data %&gt;%
          taxon_sp = gsub(&#39;^([^_]+_[^_]+).*&#39;, &quot;\\1&quot;,taxon))  # remove everything after the second &quot;_&quot;, (removes subsp epithet)
 
 # quick check that the re-naming worked as intended
-tail(phy$tip.label)
-euc_data %&gt;% pull(taxon) %&gt;% unique() %&gt;% tail()</code></pre>
-<p><br />
-</p>
+euc_data %&gt;% select(taxon, taxon_sp) %&gt;% unique() %&gt;% tail()</code></pre>
 <p>Now we have resolved the nomenclature, we can check which and how
 many taxa in the phylogeny have AusTraits records for our traits of
 interest.</p>
 <pre class="r"><code># check how many species with trait data are also in the phylogeny
 match &lt;- euc_data %&gt;% 
   filter(trait_name %in% traits) %&gt;% 
-  pull(taxon) %&gt;% intersect(phy$tip.label);length(match) # we have data on at least one leaf trait for 422 taxa
+  pull(taxon) %&gt;% intersect(phy$tip.label);length(match) # we have data on at least one leaf trait for 421 taxa
 
-# check how many if we drop the subsp epithet off both the tip.labels of the phylogeny and the taxon names in the data
+# check how many if we drop the subsp epithet off both the tip.labels of 
+# the phylogeny and the taxon names in the data
 match_sp &lt;- euc_data %&gt;% 
   filter(trait_name %in% traits) %&gt;% 
   pull(taxon_sp) %&gt;% # subsp epithet dropped
-  intersect(gsub(&#39;^([^_]+_[^_]+).*&#39;, &quot;\\1&quot;, phy$tip.label)); length(match_sp) # increases to 458 taxa by ignoring subspecies nomenclature
+  intersect(gsub(&#39;^([^_]+_[^_]+).*&#39;, &quot;\\1&quot;, phy$tip.label)); length(match_sp) # increases to 457 taxa by ignoring subspecies nomenclature
 
 # and adds almost 2000 records across the three traits (~25% increase in sample size)
-euc_data %&gt;% filter(taxon %in% match, trait_name %in% traits) %&gt;% select(value) %&gt;% na.omit() %&gt;% nrow() # retaining subsp identity
-euc_data %&gt;% filter(taxon_sp %in% match_sp, trait_name %in% traits) %&gt;% select(value) %&gt;% na.omit() %&gt;% nrow() # removing subsp identity
+euc_data %&gt;% filter(taxon %in% match, trait_name %in% traits) %&gt;% select(value) %&gt;% na.omit() %&gt;% nrow()
+euc_data %&gt;% filter(taxon_sp %in% match_sp, trait_name %in% traits) %&gt;% select(value) %&gt;% na.omit() %&gt;% nrow()
 
 # One thing to check is that we will not create duplicate tip labels in the phylogeny by dropping subsp epithets.
 # This would happen if the phylogeny featured multiple subsp for any given species. To confirm this, we can check 
 # that the number of unique tip labels doesn&#39;t change when we drop the subsp epithet.
 length(unique(gsub(&#39;^([^_]+_[^_]+).*&#39;, &quot;\\1&quot;, phy$tip.label))) == length(unique(phy$tip.label)) # all good
 
-# Ok, let&#39;s drop subsp epithets off the tip labels and prune the phylogeny to those species for which we have trait data (n = 461)
+# Ok, let&#39;s drop subsp epithets off the tip labels of the phylogeny
 phy$tip.label &lt;- gsub(&#39;^([^_]+_[^_]+).*&#39;, &quot;\\1&quot;, phy$tip.label)
-phy &lt;- keep.tip(phy, match_sp)</code></pre>
+
+# match in taxonomic information from Nicolle 2022
+euc_data$subgenus &lt;- taxonomy[match(euc_data$taxon_sp, taxonomy$taxon_sp),]$subgenus # match each taxa to subgenus
+euc_data$series &lt;- taxonomy[match(euc_data$taxon_sp, taxonomy$taxon_sp),]$series # match each taxa to subgenus</code></pre>
 <p><br />
 </p>
+</div>
+<div id="modelling-phylogeny-at-a-higher-taxonomic-rank" class="section level3">
+<h3>Modelling phylogeny at a higher taxonomic rank</h3>
+<p>Phylogenetic signal in species traits is to some extant a function of
+phylogenetic scale (ref Revell XXXX). By including more diverse species
+in our phylogeny, we capture deeper splits that represent more
+meaningful divergences in the genotype and phenotype of extant lineages,
+precisely the effects we intend to model when analysing inter-species
+data. One consequence of this, is that shallow topology (near the tips)
+is less informative than deep topology when attempting to infer patterns
+of phylogenetic niche conservatism, because differences between genera
+are usually more significant than differences between species within
+genera. Furthermore, shallow topology can be problematic for clades in
+which closely related species hybridise, as by definition a phylogeny (a
+type of acyclic graph) assumes a bifurcating evolutionary process. In
+such cases, phylogenies defined for a taxonomic rank above the species
+level (e.g., genus), may be a preferable choice. If taxonomy for the
+groups in question is well resolved, it may be possible to define a
+phylogeny with rank just above the species level (e.g., series or
+section). This may be sufficient to mitigate errors due to
+hybridization, as inter-fertility often declines rapidly with
+phylogenetic distance (euc ref). Defining our phylogeny at a higher
+taxonomic rank also has the surprisingly powerful benefit of allowing us
+to include data on species that were not featured in the species-level
+phylogeny; species are now simply treated as replicates of the
+appropriate taxonomic group within the higher rank tree.</p>
+<p>For higher taxonomic ranks (e.g. genus), it will usually be possible
+to derive a unique consensus tree by sampling a single species from each
+genus and simply pruning the tree to those tips. This approach may be
+problematic for lower taxonomic ranks however, because more closely
+related species are less likely to be monophyletic with respect to the
+taxonomic rank in question (). Even in such cases, we can easily account
+for this phylogenetic uncertainty by randomly sampling topologies at the
+specified rank and fitting our models over this sample of trees.</p>
+<p>For the current example, we will sample trees at the level of
+taxonomic series (which in Eucalyptus contain between 1-XX species),
+reducing the dimension of our tree from 656 tips in the species-level
+tree to 87 tips in the series-level tree.</p>
+<pre class="r"><code># subset data and tree to species with series level taxonomy
+phy_2 &lt;- keep.tip(phy, intersect(euc_data %&gt;% filter(!is.na(series)) %&gt;% pull(taxon),phy$tip.label))
+dat_2 &lt;- euc_data %&gt;% 
+  filter(!is.na(series),
+         taxon %in% phy_2$tip.label) %&gt;% 
+  arrange(factor(taxon, levels = phy_2$tip.label))
+
+# sample series level topologies
+n_samp = 10
+tree_samp &lt;- list()
+C_samp &lt;- list()
+# run loop
+for (i in 1:n_samp) {
+  samp &lt;- dat_2 %&gt;% group_by(series) %&gt;% slice_sample(n=1) # sample one species from each series and keep only those tips to create series level tree
+  phy.ser &lt;- tree.ultra(phy, samp) # make ultrametric tree
+  samp &lt;- samp %&gt;% arrange(factor(taxon, levels = phy.ser$tip.label))
+  phy.ser$tip.label &lt;- samp$series
+  tree_samp[[i]] &lt;- phy.ser
+  C_samp[[i]] &lt;- vcv.phylo(phy.ser, cor = T)
+}
+
+# plot sampled topology
+plot(tree_samp[[1]], edge.width = 1, show.tip.label = F)
+
+# plot species-level tree again to compare
+plot(phy, edge.width = 1, show.tip.label = F)
+
+# create list of C matrices and dfs for use with brm_multiple()
+C_list &lt;- list();for (i in 1:length(C_samp)){C_list[[i]] &lt;- list(C = C_samp[[i]])}
+dat_list &lt;- lapply(1:length(C_samp), function(x) dat_2)</code></pre>
+<p>We can see that our sampled series-level trees capture the major
+structural form of the species-level tree, but show some variation in
+lower order topology and branch lengths. By fitting our model over this
+sample of trees and combining chains for inference, we are able to
+integrate over this phylogenetic uncertainty.</p>
+<p>We can also check if we are able to include more data by assigning
+species missing from the original phylogeny to a tip (taxonomic series)
+in the new tree.</p>
+<pre class="r"><code># we can include data on another 47 taxa (~10% increase) by using the series level tree
+match_series &lt;- euc_data %&gt;% 
+  filter(trait_name %in% traits,
+         series %in% tree_samp[[1]]$tip.label) %&gt;% 
+  pull(taxon_sp) %&gt;% unique()
+length(match_sp) # 457
+length(match_series) # 504
+
+# adding another 700 observations (a further 8% increase in sample size)
+euc_data %&gt;% filter(taxon_sp %in% match_sp, trait_name %in% traits) %&gt;% select(value) %&gt;% na.omit() %&gt;% nrow()
+euc_data %&gt;% filter(taxon_sp %in% match_series, trait_name %in% traits) %&gt;% select(value) %&gt;% na.omit() %&gt;% nrow()</code></pre>
+<p><br />
+</p>
+</div>
 <div id="reframe-data" class="section level3">
 <h3>Reframe data</h3>
 <p>Now we have cleaned the data and matched the nomenclature it’s time
@@ -1740,39 +1832,33 @@ euc_wide &lt;- euc_data %&gt;%
   mutate(across(all_of(traits), as.numeric))
 
 # then subset the data to those species in the phylogeny, setting taxon = taxon_sp (subsp epithet dropped)
-euc_wide &lt;- euc_wide %&gt;% mutate(taxon = taxon_sp) %&gt;% select(-c(taxon_sp, taxon_name)) %&gt;% filter(taxon %in% match_sp)</code></pre>
-<p><br />
-</p>
+euc_wide &lt;- euc_wide %&gt;% mutate(taxon = taxon_sp) %&gt;% select(-c(taxon_sp, taxon_name)) #%&gt;% filter(series %in% match_series)</code></pre>
+<p>We will also prune the species level-tree to contain only those
+species in the data (n = 457)</p>
+<pre class="r"><code># prune species level-tree to data
+# phy &lt;- keep.tip(phy, euc_wide %&gt;% filter(taxon %in% phy$tip.label) %&gt;% pull(taxon) %&gt;% unique)</code></pre>
 <p>We can now examine and summarise our new data table.</p>
 <pre class="r"><code># we have a good number of observations for LMA across taxa, less so for N_mass and d13C
 euc_wide %&gt;% select(all_of(traits)) %&gt;% summarise_all(~ sum((!is.na(.))))
 
 # we can also calculate the number of observations for each trait for each taxon
-data_coverage &lt;- euc_wide %&gt;% group_by(taxon) %&gt;% summarise(across(all_of(traits),~ sum(!is.na(.))));data_coverage %&gt;% head()
+species_coverage &lt;- euc_wide %&gt;% filter(taxon %in% phy$tip.label) %&gt;% group_by(taxon) %&gt;% summarise(across(all_of(traits),~ sum(!is.na(.))))
+series_coverage &lt;- euc_wide %&gt;% filter(series %in% tree_samp[[1]]$tip.label) %&gt;% group_by(series) %&gt;% summarise(across(all_of(traits),~ sum(!is.na(.))))
 
-# We have many missing values (e.g., 78% of observations do not report values for d13C)
+# print
+species_coverage
+series_coverage
+
+# We have many missing values (e.g., ~79% of observations do not report values for d13C)
 euc_wide %&gt;% select(all_of(traits)) %&gt;% summarise_all(~ sum((!is.na(.)))) %&gt;% `/`(nrow(euc_wide)) %&gt;% round(3)
 
-# however this is due to the fact that many studies that report LMA do not report our other leaf traits, e.g.,
-euc_wide %&gt;% head()
+# However, the proportion of taxa in the species-level tree reporting at least one observation for each trait is actually much higher for Nmass and d13C
+species_coverage %&gt;% mutate(across(all_of(traits), ~ ifelse(.&gt;0,1,0))) %&gt;% select(-1) %&gt;% colSums() %&gt;% `/`(Ntip(phy)) %&gt;% round(2)
 
-# the proportion of taxa reporting at least one observation for each trait is actually much higher
-data_coverage %&gt;% mutate(across(all_of(traits), ~ ifelse(.&gt;0,1,0))) %&gt;% select(-1) %&gt;% colSums() %&gt;% `/`(Ntip(phy)) %&gt;% round(2)</code></pre>
-<p><br />
-</p>
+# and, of course, even higher for the series level tree
+series_coverage %&gt;% mutate(across(all_of(traits), ~ ifelse(.&gt;0,1,0))) %&gt;% select(-1) %&gt;% colSums() %&gt;% `/`(Ntip(tree_samp[[1]])) %&gt;% round(2)</code></pre>
 <p>As a final data preparation step, we will transform our leaf traits
-and rename our data table and variables for brevity. To simplify
-matters, we will also create a second data table of species mean trait
-values (each species represented by a single row) by pooling all
-observations for each species across studies into a single mean value.
-This procedure simplifies the structure of our data set considerably,
-but throws away a lot of information about different potential sources
-of variation (e.g., between-study variability, within-study
-variability). We will continue the tutorial using the latter simplified
-version for the sake of exposition, but return to the former more
-detailed data set at the end of the tutorial to demonstrate how to
-appropriately handle such observation level data in a multilevel
-meta-analytic model.</p>
+and rename our data table and variables for brevity.</p>
 <pre class="r"><code>## final clean
 # - rename data object for brevity
 # - log then z transform leaf traits and abbreviate names
@@ -1780,19 +1866,31 @@ dat &lt;- euc_wide %&gt;%
   mutate(N_mass = scale(log(leaf_N_per_dry_mass))[,1],
          d13C = scale(-1*log(abs(leaf_delta13C)))[,1], # to aide interpretation, restore negative values with -1*
          LMA = scale(log(leaf_mass_per_area))[,1],
-         phylo = taxon,
-         replicates = as.numeric(replicates))
-
-## calculate species mean trait values
+         replicates = as.numeric(replicates))</code></pre>
+<p><br />
+</p>
+</div>
+<div id="data-summaries" class="section level3">
+<h3>Data Summaries</h3>
+<p>To facilitate plots of species mean trait values and demonstrate a
+meta-analytic implementation of MR-PMM, we will create a summary data
+table by pooling all observations for each species across studies into a
+single mean value and associated standard error (each species
+represented by a single row). This procedure simplifies the structure of
+our data set considerably, but throws away a lot of information about
+different potential sources of variation (i.e., within-species,
+between-study). We will first fit the simplified meta-analytic version
+for the sake of exposition, then demonstrate a preferable approach of
+using additional random effects in a multilevel model to capture the
+cross-classified sampling design of observations.</p>
+<pre class="r"><code>## calculate species mean trait values
 # as each observation reports the number of replicates, we will use a weighted mean and se to 
 # properly account for variation in the uncertainty of trait values
 dat_mean &lt;- dat %&gt;%
-  group_by(taxon) %&gt;% 
-  summarise(across(all_of(c(&quot;N_mass&quot;,&quot;d13C&quot;,&quot;LMA&quot;)), ~ .x %&gt;% weighted.mean(w = replicates, na.rm = TRUE))) %&gt;%  # weighted mean
-                                          # ~ .x %&gt;% wtd.stderror(weights = replicates))) %&gt;% # can&#39;t get wtd.stderror to work within this call (to do with across()?)
-    mutate(phylo = taxon)
+  group_by(taxon, series, subgenus) %&gt;% 
+  summarise(across(all_of(c(&quot;N_mass&quot;,&quot;d13C&quot;,&quot;LMA&quot;)), ~ .x %&gt;% weighted.mean(w = replicates, na.rm = TRUE))) # weighted mean
 
-# calculate weighted se (ideally achieved within summarise above)
+# calculate weighted se (ideally achieved using map() within summarise above)
 dat_se &lt;- dat %&gt;%
             group_by(taxon) %&gt;% 
             select(taxon, N_mass,d13C,LMA,replicates) %&gt;%
@@ -1823,53 +1921,50 @@ for (i in 1:length(taxa)){
                     { wtd.stderror(.$LMA, w = .$replicates) }
 }
 result %&gt;% head() # check result
-dat_mean &lt;- dat_mean %&gt;% left_join(.,result) # merge weighted se into data frame
+dat_mean &lt;- dat_mean %&gt;% left_join(.,result) %&gt;% ungroup # merge weighted se into data frame
 
-# for observations with NA for se (i.e., species with n &lt; 2 obs for a given trait), assign 90th pctl. se for that trait
+# for observations with NA for se (i.e., species with a single obs for a given trait), assign 90th pctl. se for that trait
 dat_mean[is.na(dat_mean$N_mass.se),]$N_mass.se &lt;- quantile(dat_mean[!is.na(dat_mean$N_mass.se),]$N_mass.se, 0.9)
 dat_mean[is.na(dat_mean$d13C.se),]$d13C.se &lt;- quantile(dat_mean[!is.na(dat_mean$d13C.se),]$d13C.se, 0.9)
 dat_mean[is.na(dat_mean$LMA.se),]$LMA.se &lt;- quantile(dat_mean[!is.na(dat_mean$LMA.se),]$LMA.se, 0.9)
 
 # compare the two data sets
-dat %&gt;% select(taxon, dataset_id,  LMA, N_mass, d13C) %&gt;% head() # rows contain individual obs, multiple rows per species and per study.
-dat_mean %&gt;% select(-phylo) %&gt;%  head() # single row containing species mean trait values</code></pre>
+dat %&gt;% select(taxon, series, subgenus, dataset_id,  LMA, N_mass, d13C) %&gt;% head() # rows contain individual obs, multiple rows per species and per study.
+dat_mean %&gt;% head() # single row containing species mean trait values</code></pre>
 <p><br />
 </p>
 </div>
-</div>
-</div>
-<div id="plotting" class="section level1">
-<h1>Plotting</h1>
-<p>We are finally ready to start playing with the data! First, let’s
-make a few plots to get a feel for things.</p>
-<pre class="r"><code>## clean data and tree for plotting
-
-# add taxonomic info
-taxonomy &lt;- read.csv(&quot;Classification-Of-The-Eucalypts-Nicolle-2022.csv&quot;) # load in current taxonomy
-dat_mean$subgenus &lt;- taxonomy[match(dat_mean$taxon, taxonomy$BINOMIAL),]$SUBGENUS # match each taxa to subgenus
-
-# filter to complete cases
-dat_cc &lt;- dat_mean %&gt;% select(taxon, subgenus, N_mass, d13C, LMA) %&gt;% na.omit() %&gt;% 
-  filter(subgenus %in% c(&quot;Eucalyptus&quot;, &quot;Eudesmia&quot;, &quot;Symphyomyrtus&quot;))
+<div id="plotting" class="section level2">
+<h2>Plotting</h2>
+<p>Now we have summarised our data to species level, let’s make a few
+plots to visualize the phylogenetic distribution of trait values.</p>
+<pre class="r"><code># filter to complete cases for plotting
+dat_cc &lt;- dat_mean %&gt;% select(taxon, series, subgenus, N_mass, d13C, LMA) %&gt;% 
+  filter(taxon %in% phy$tip.label) %&gt;% 
+  drop_na() %&gt;% 
+  filter(subgenus %in% c(&quot;Eucalyptus&quot;, &quot;Eudesmia&quot;, &quot;Symphyomyrtus&quot;),
+         !(!is.na(LMA) &amp; LMA &gt; 3) &amp; !(!is.na(N_mass) &amp; N_mass &lt; -4)) # remove outliers for plotting
 sg_cols &lt;- c(&quot;#E69F00&quot;,&quot;#009E73&quot;, &quot;#56B4E9&quot;)
-X &lt;- dat_cc %&gt;% select(N_mass, d13C, LMA) %&gt;% as.matrix()
+X &lt;- dat_cc %&gt;% ungroup() %&gt;% select(N_mass, d13C, LMA) %&gt;% as.matrix()
 rownames(X) &lt;- dat_cc %&gt;% pull(taxon)
-phy_cc &lt;- keep.tip(phy, dat_cc %&gt;% pull(taxon))
-
-# scatter-plot
-dat_cc %&gt;% select(N_mass, LMA) %&gt;% plot()
-dat_cc &lt;- dat_cc %&gt;% filter(!(!is.na(LMA) &amp; LMA &gt; 3) &amp; !(!is.na(N_mass) &amp; N_mass &lt; -4)) # remove outliers
-
-# re-plot
-dat_cc %&gt;% ggplot(aes(N_mass, LMA, color = subgenus)) + geom_point(size=2) + 
+phy_cc &lt;- keep.tip(phy, dat_cc %&gt;% pull(taxon))</code></pre>
+<p>First some bivariate scatter plots to visualise pairwise covariance
+at the level of species phenotypes.</p>
+<pre class="r"><code># scatter-plots
+p1 &lt;- dat_cc %&gt;% ggplot(aes(N_mass, LMA, color = subgenus)) + geom_point(size=3) + 
   theme_classic() + theme(axis.text = element_text(size=15)) + guides(color=&quot;none&quot;) + scale_color_manual(values=sg_cols)
-dat_cc %&gt;% ggplot(aes(d13C, LMA, color = subgenus)) + geom_point(size=2) +
+p2 &lt;- dat_cc %&gt;% ggplot(aes(d13C, LMA, color = subgenus)) + geom_point(size=3) +
   theme_classic() + theme(axis.text = element_text(size=15)) + guides(color=&quot;none&quot;) + scale_color_manual(values=sg_cols)
-dat_cc %&gt;% ggplot(aes(N_mass, d13C, color = subgenus)) + geom_point(size=2) +
+p3 &lt;- dat_cc %&gt;% ggplot(aes(N_mass, d13C, color = subgenus)) + geom_point(size=3) +
   theme_classic() + theme(axis.text = element_text(size=15)) + guides(color=&quot;none&quot;) + scale_color_manual(values=sg_cols)
 
-
-## plot data against tree
+ggarrange(p1,p2,p3,ncol = 1)</code></pre>
+<p>To get a feel for the phylogenetic distribution of trait values, it
+is useful to plot our trait data as a heatmap matrix against the tree.
+All three traits are strongly structured with respect to phylogeny
+(similar values among closely related species). Furthermore, these
+traits appear to </p>
+<pre class="r"><code>## plot data against tree
 # group by operational taxonomic unit (OTU)
 grp &lt;- list(Eucalyptus = dat_cc[which(dat_cc$subgenus == &#39;Eucalyptus&#39;), ]$taxon,
             Eudesmia = dat_cc[which(dat_cc$subgenus == &#39;Eudesmia&#39;), ]$taxon,
@@ -1881,16 +1976,56 @@ p &lt;- groupOTU(p, grp, &#39;subgenus&#39;) + aes(color=subgenus)
 # heatmap
 gheatmap(p, X, offset=-1, width=0.4, color=NA,
          colnames=T, colnames_position = &quot;top&quot;, 
-         colnames_offset_x = 0, colnames_offset_y = 10, colnames_angle = 20, 
+         colnames_offset_x = 0, colnames_offset_y = 5, colnames_angle = 0, 
          font.size = 2.5) +
   scale_fill_viridis_c(option=&quot;D&quot;, name=&quot;&quot;, na.value=&quot;white&quot;) +
-  guides(color=&quot;none&quot;) +
-  ylim(-1, 375)</code></pre>
+  # guides(color=&quot;none&quot;) +
+  ylim(-1, 370)</code></pre>
+<p>The same pattern is evident at the series level.</p>
+<pre class="r"><code>## Repeat for series level tree
+# summarise by series
+series_mean &lt;- dat %&gt;%
+  filter(!is.na(series)) %&gt;% 
+  group_by(series, subgenus) %&gt;% 
+  summarise(across(all_of(c(&quot;N_mass&quot;,&quot;d13C&quot;,&quot;LMA&quot;)), ~ .x %&gt;% 
+                   weighted.mean(w = replicates, na.rm = TRUE)))
+# prep trait data frame
+dat_cc_ser &lt;- series_mean %&gt;%
+  drop_na() %&gt;% 
+  filter(subgenus %in% c(&quot;Eucalyptus&quot;, &quot;Eudesmia&quot;, &quot;Symphyomyrtus&quot;))
+X &lt;- dat_cc_ser %&gt;% ungroup() %&gt;% select(N_mass, d13C, LMA) %&gt;% as.matrix()
+rownames(X) &lt;- dat_cc_ser %&gt;% pull(series)
+phy_cc &lt;- keep.tip(tree_samp[[1]], dat_cc_ser %&gt;% filter(series %in% tree_samp[[1]]$tip.label) %&gt;% pull(series))
+
+# group by operational taxonomic unit (OTU)
+grp &lt;- list(Eucalyptus = dat_cc_ser[which(dat_cc_ser$subgenus == &#39;Eucalyptus&#39;), ]$series,
+            Eudesmia = dat_cc_ser[which(dat_cc_ser$subgenus == &#39;Eudesmia&#39;), ]$series,
+            Symphyomyrtus = dat_cc_ser[which(dat_cc_ser$subgenus == &#39;Symphyomyrtus&#39;), ]$series)
+p &lt;- ggtree(phy_cc, layout = &#39;rectangular&#39;) + 
+  scale_color_manual(values=c(&quot;#56B4E9&quot;,&quot;orange&quot;, &quot;#009E73&quot;,&quot;#56B4E9&quot;))
+p &lt;- groupOTU(p, grp, &#39;subgenus&#39;) + aes(color=subgenus)
+
+# heatmap
+gheatmap(p, X, offset=-1, width=0.4, color=NA,
+         colnames=T, colnames_position = &quot;top&quot;, 
+         colnames_offset_x = 0, colnames_offset_y = 1, colnames_angle = 0, 
+         font.size = 2.5) +
+  scale_fill_viridis_c(option=&quot;D&quot;, name=&quot;&quot;, na.value=&quot;white&quot;) +
+  # guides(color=&quot;none&quot;) +
+  ylim(-1, 81)</code></pre>
 <p><br />
 </p>
 </div>
-<div id="univariate-models" class="section level1">
-<h1>Univariate models</h1>
+</div>
+<div id="models" class="section level1">
+<h1>Models</h1>
+<p>We will now fit a series of models to these data to explore different
+approaches to phylogenetic comparative analyses and highlight some
+strengths of multi-response phylogenetic mixed models (MR-PMM).</p>
+<p><br />
+</p>
+<div id="common-univariate-approaches-ols-pgls" class="section level3">
+<h3>Common univariate approaches (OLS, PGLS)</h3>
 <p>First, let’s see what conclusions we would come to by using
 traditional univariate approaches to examine the relationship between
 two of our chosen traits (N_mass and d13C): ordinary least squares
@@ -1912,7 +2047,7 @@ fit_LAMBDA &lt;- dat_PGLS %&gt;% phylolm(d13C ~ N_mass, ., phy, model = &quot;la
 # once we account for phylogeny the relationship disappears
 dat_mean %&gt;% select(N_mass, d13C) %&gt;% plot()
 fit_OLS %&gt;% abline(col=&quot;blue&quot;);fit_PGLS %&gt;% abline(col=&quot;red&quot;);fit_LAMBDA %&gt;% abline(col=&quot;purple&quot;)
-legend(1.35, -3.15, legend=c(&quot;OLS&quot;, expression(&quot;PGLS&quot;[lambda]), &quot;PGLS&quot;), fill = c(&quot;blue&quot;,&quot;purple&quot;,&quot;red&quot;))</code></pre>
+legend(-4.25, 2.5, legend=c(&quot;OLS&quot;, expression(&quot;PGLS&quot;[lambda]), &quot;PGLS&quot;), fill = c(&quot;blue&quot;,&quot;purple&quot;,&quot;red&quot;))</code></pre>
 <p>OLS reports a significant negative relationship between
 <code>d13C</code> and <code>N_mass</code>. However, this relationship is
 reversed (becomes positive) after accounting for phylogenetic signal in
@@ -1926,337 +2061,602 @@ trait relationships. However, this approach risks overlooking functional
 relationships between traits that are phylogenetically structured due
 to, for example, phylogenetic niche conservatism. A preferable approach
 is to explicitly estimate both phylogenetic and non-phylogenetic
-correlations between traits using multi-response phylogenetic mixed
-model (MR-PMM).</p>
+correlations between traits using MR-PMM.</p>
 <p><br />
 </p>
 </div>
-<div id="mr-pmm" class="section level1">
-<h1>MR-PMM</h1>
-<p>Let’s try fitting a MR-PMM using all three traits and see whether a
-negative correlation between <code>d13C</code> and <code>N_mass</code>
-is indeed manifesting on the phylogenetic level. First we will fit the
-model using <code>MCMCglmm</code>.</p>
+<div id="mr-pmm" class="section level3">
+<h3>MR-PMM</h3>
+<p>Let’s try fitting a MR-PMM in which all three traits are specified as
+response variables and see whether a negative correlation between
+<code>d13C</code> and <code>N_mass</code> is indeed manifesting on the
+phylogenetic level (as suggested by PGLS above).</p>
+<p>First we will fit a meta-analytic model to the species mean trait
+data, passing in the sampling variances for each observation via the the
+<code>mev</code> and <code>resp_se</code> arguments in
+<code>MCMCglmm</code>and <code>brms</code> respectively. Using
+<code>MCMCglmm</code>,</p>
 <pre class="r"><code>## MR-PMM
-C &lt;- inverseA(phy)$Ainv # inverse phylogenetic covariance matrix
-p_MR &lt;- list(R = list(V=diag(3), nu=3), # uninformative prior
-             G = list(G1=list(V=diag(3), nu=3)))
-fit_MR &lt;- MCMCglmm(cbind(N_mass, d13C, LMA) ~ trait-1, # cbind() specifies multivariate response vector
-                      mev      = c(dat_mean$N_mass.se^2, dat_mean$d13C.se^2, dat_mean$LMA.se^2),
-                      random   = ~us(trait):phylo, # ~us() specifies unstructured covariance matrix
+
+# phylogenetic correlation matrix (here actually the inverse of the phylo covariance matrix)
+C &lt;- inverseA(phy %&gt;% 
+              keep.tip(dat_mean %&gt;% filter(taxon %in% phy$tip.label) %&gt;% pull(taxon)))$Ainv
+
+# uninformative prior
+p_mean &lt;- list(R = list(V=diag(3), nu=3),
+               G = list(G1=list(V=diag(3), nu=3)))
+
+# subset data to tree
+dat_mean_fit &lt;- dat_mean %&gt;% filter(taxon %in% phy$tip.label)
+
+# fit model
+fit_mean_mcmcglmm &lt;- MCMCglmm(cbind(N_mass, d13C, LMA) ~ trait-1, # cbind() specifies multivariate response vector
+                      mev      = c(dat_mean_fit$N_mass.se^2, dat_mean_fit$d13C.se^2, dat_mean_fit$LMA.se^2),
+                      random   = ~us(trait):taxon, # ~us() specifies unstructured covariance matrix
                       rcov     = ~us(trait):units,
-                      ginv     = list(phylo = C), # pass inv phylo cov mat
+                      ginv     = list(taxon = C), # pass inv phylo cov mat
                       family   = c(&quot;gaussian&quot;,&quot;gaussian&quot;,&quot;gaussian&quot;), # all Gaussian traits
-                      nitt     = 25000,
+                      nitt     = 55000,
                       burnin   = 5000,
-                      thin     = 20,
-                      data     = as.data.frame(dat_mean),
-                      prior    = p_MR,
-                      verbose  = FALSE)</code></pre>
-<p><br />
-</p>
-<p>And now the same model using <code>brms</code>. Note that unlike
+                      thin     = 50,
+                      data     = as.data.frame(dat_mean_fit),
+                      prior    = p_mean,
+                      verbose  = FALSE)
+summary(fit_mean_mcmcglmm)</code></pre>
+<p>We now fit the same model using <code>brms</code>. Note that unlike
 <code>MCMCglmm</code>, <code>brms</code> does not impute missing values
-by default, so we are actually not fitting to the same dataset. One
-option is to impute these values (e.g., using <code>rphylopars</code>)
-before fitting our <code>brms</code> model (Note, because the
-Hamiltonian sampler used in <code>brms</code> is unable to take
-advantage of numerical solutions for the multivariate Gaussian case,
-fitting this model in <code>brms</code> will be considerably slower. We
-therefore provide the fitted <code>brms</code> model as an .rds).</p>
+by default, we must instruct it to do so by including <code>mi()</code>
+in the model formula.</p>
 <pre class="r"><code># BRMS
 C &lt;- vcv.phylo(phy, corr = T)
-bf_y1 &lt;- bf(N_mass | resp_se(N_mass.se, sigma = TRUE) ~ 1 + (1|b|gr(phylo, cov = C)))
-bf_y2 &lt;- bf(d13C | resp_se(d13C.se, sigma = TRUE) ~ 1 + (1|b|gr(phylo, cov = C)))
-bf_y3 &lt;- bf(LMA | resp_se(LMA.se, sigma = TRUE) ~ 1 + (1|b|gr(phylo, cov = C)))
 
-fit_MR_2 &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
-              data    = dat_mean, 
+# model formulae
+bf_y1 &lt;- brmsformula(N_mass | mi() +  resp_se(N_mass.se, sigma = TRUE) ~ 1 + (1|b|gr(taxon, cov = C)))
+bf_y2 &lt;- brmsformula(d13C | mi() + resp_se(d13C.se, sigma = TRUE) ~ 1 + (1|b|gr(taxon, cov = C)))
+bf_y3 &lt;- brmsformula(LMA | mi() + resp_se(LMA.se, sigma = TRUE) ~ 1 + (1|b|gr(taxon, cov = C)))
+
+fit_mean_brms &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
+              data    = dat_mean %&gt;% filter(taxon %in% phy$tip.label), # filter to species featured in the tree
               family  = gaussian(), 
               data2   = list(C = C),
-              control = list(adapt_delta = 0.85, max_treedepth = 12),
+              control = list(adapt_delta = 0.95, max_treedepth = 12),
               cores   = 4, 
-              chains  = 4)</code></pre>
+              chains  = 4)
+fit_mean_brms
+
+saveRDS(fit_mean_brms, &quot;fit_mean_brms.rds&quot;)</code></pre>
+<p>Importantly, because the Hamiltonian sampler is unable to take
+advantage of numerical solutions for the multivariate Gaussian case,
+fitting this model in <code>brms</code> is considerably slower than
+<code>MCMCglmm</code>.</p>
+<pre class="r"><code># show runtime of each model
+
+fit_mean_mcmcglmm_sys_time
+rstan::get_elapsed_time(fit_mean_brms$fit) %&gt;% apply(1,sum) %&gt;% max</code></pre>
+<p>Modelling phylogenetic effects at the series level dramatically
+reduces fitting time. Furthermore, inferences are qualitatively
+unchanged in this case (likely to be data and phylogeny dependent).</p>
+<pre class="r"><code># phylo vcv
+C &lt;- vcv.phylo(tree_samp[[1]], corr = T)
+
+# formulae
+bf_y1 &lt;- brmsformula(N_mass | mi() + resp_se(N_mass.se, sigma = TRUE) ~ 1 + (1|b|gr(series, cov = C)))
+bf_y2 &lt;- brmsformula(d13C | mi() + resp_se(d13C.se, sigma = TRUE) ~ 1 + (1|b|gr(series, cov = C)))
+bf_y3 &lt;- brmsformula(LMA | mi() + resp_se(LMA.se, sigma = TRUE) ~ 1 + (1|b|gr(series, cov = C)))
+
+# fit
+fit_mean_series_brms &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
+              data    = dat_mean %&gt;% filter(series %in% tree_samp[[1]]$tip.label), # filter to series featured in the tree
+              family  = gaussian(), 
+              data2   = list(C = C),
+              control = list(adapt_delta = 0.95, max_treedepth = 12),
+              cores   = 4, 
+              chains  = 4)
+# saveRDS(fit_mean_series_brms, &quot;fit_mean_series_brms.rds&quot;)
+
+rstan::get_elapsed_time(fit_mean_series_brms$fit) %&gt;% apply(1,sum) %&gt;% max</code></pre>
 <p><br />
 </p>
-<p>After model fitting, the first step is to run diagnostics (see end of
-tutorial for in-depth diagnostics and model validation).</p>
-<pre class="r"><code>## basic diagnostics
-plot(fit_MR$VCV) # sample chains for phylo components are still a bit lumpy but roughly normal
-round(autocorr(fit_MR$VCV),2)[,,1] # lag &gt; 0 should be close to 0
-summary(fit_MR) # for the 1000 samples drawn, the effective sample size for some parameters is quite low</code></pre>
-<p><br />
-</p>
-<p>Based on these initial diagnostics we would want to run the chains
-for longer (increase <code>nitt</code>) with greater <code>thin</code>
-to attain a higher effective sample size. Detailed coverage of model
-diagnostics and predictive assessment for MR-PMM can be found in
-Tutorial 1 on the MR-PMM GitHub repo (<a href="https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html" class="uri">https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_tutorial.html</a>).</p>
-<p>Ok, so what does our MR-PMM tell us about the relationship between
-<code>d13C</code> and <code>N_mass</code>? In the model summary, we can
-see the posterior mean and 95% credible intervals of each model
-parameter. The intercepts for each trait are reported as location
-effects, the phylogenetic (co)variances under <code>phylo</code> and the
-residual (co)variances under <code>units</code>. A negative phylogenetic
-covariance between <code>d13C</code> and <code>N_mass</code> is
-indicated by the negative lower and upper bounds for the phylogenetic
-covariance term <code>traitd13C:traitN_mass.phylo</code>. However, in
-order to make meaningful comparisons, we must calculate the correlation
-(scaled covariance) between traits on both the phylogenetic and residual
-level.</p>
-<pre class="r"><code># calculate estimates of signal in each trait as well as correlations between traits on
-# the phylogenetic and non-phylogenetic level
-mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;d13C&quot;, &quot;phylo&quot;, &quot;units&quot;, summary = T)
-mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;LMA&quot;, &quot;phylo&quot;, &quot;units&quot;, summary = T)
-
-# to calculate phylogenetic signal in a trait manually: lambda = sigma_phy / (sigma_phy + sigma_non-phy)
-d13C_sig &lt;- (fit_MR$VCV[,&quot;traitd13C:traitd13C.phylo&quot;] /
-           (fit_MR$VCV[,&quot;traitd13C:traitd13C.phylo&quot;] + fit_MR$VCV[,&quot;traitd13C:traitd13C.units&quot;]))
-round(quantile(d13C_sig, probs = c(0.025,0.25,0.5,0.75,0.975)),3)
-
-# to calculate the phylogenetic correlation between two traits manually:
-N_mass_d13C_phy &lt;- (fit_MR$VCV[,&quot;traitN_mass:traitd13C.phylo&quot;] /
-                   sqrt(fit_MR$VCV[,&quot;traitN_mass:traitN_mass.phylo&quot;] * fit_MR$VCV[,&quot;traitd13C:traitd13C.phylo&quot;]))
-round(quantile(N_mass_d13C_phy, probs = c(0.025,0.25,0.5,0.75,0.975)),3)
-
-# when summary = F, mrpmm_cor() returns the full posterior for each parameter
-# we can then use functions from the bayesplot package to visualise
-mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;d13C&quot;, &quot;phylo&quot;, &quot;units&quot;) %&gt;% mcmc_intervals(prob_outer = 0.95)
-mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;d13C&quot;, &quot;phylo&quot;, &quot;units&quot;) %&gt;% mcmc_areas(area_method = &quot;scaled height&quot;)
-
-# plot posteriors for all pairwise decomposed correlations between traits
-MR_plot &lt;- cbind(mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;d13C&quot;, &quot;phylo&quot;, &quot;units&quot;)[,3:4],
-                 mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;LMA&quot;, &quot;phylo&quot;, &quot;units&quot;)[,3:4],
-                 mrpmm_cor(fit_MR, &quot;d13C&quot;,   &quot;LMA&quot;, &quot;phylo&quot;, &quot;units&quot;)[,3:4])
-names(MR_plot) &lt;- c(&quot;N_mass:d13C_phy&quot;,&quot;N_mass:d13C_ind&quot;,&quot;N_mass:LMA_phy&quot;,&quot;N_mass:LMA_ind&quot;,&quot;d13C:LMA_phy&quot;,&quot;d13C:LMA_ind&quot;)
-MR_plot %&gt;% mcmc_intervals(prob_outer = 0.95)
-MR_plot %&gt;% mcmc_areas(area_method = &quot;scaled height&quot;)</code></pre>
-<p><br />
-</p>
-<p>For greater control over plotting, we can make our own versions of
-such plots in ggplot from the posterior summary of each parameter</p>
-<pre class="r"><code># bind together 5-point summaries, only taking rows reporting correlations
-cbind(data.frame(trait_pair=rep(c(&quot;N_mass:d13C&quot;, &quot;N_mass:LMA&quot;, &quot;d13C:LMA&quot;), each = 2)),
-      rbind(mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;d13C&quot;, &quot;phylo&quot;, &quot;units&quot;, summary = T)[3:4,],
-            mrpmm_cor(fit_MR, &quot;N_mass&quot;, &quot;LMA&quot;, &quot;phylo&quot;, &quot;units&quot;, summary = T)[3:4,],
-            mrpmm_cor(fit_MR, &quot;d13C&quot;,   &quot;LMA&quot;, &quot;phylo&quot;, &quot;units&quot;, summary = T)[3:4,])) %&gt;% 
-  ggplot(aes(x = trait_pair, y = `50%`, col = parameter)) +
-  geom_hline(yintercept=0, linetype=&quot;dashed&quot;) +
-  geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), 
-                width = 0, position = position_dodge(width = 0.4)) +
-  geom_errorbar(aes(ymin = `25%`, ymax = `75%`), 
-                size = 1.5, width = 0, position = position_dodge(width = 0.4)) +
-  geom_point(size = 3, position = position_dodge(width = 0.4)) +
-  theme_classic() + 
-  theme(axis.text = element_text(size=12),
-        axis.title.x = element_text(size=14),
-        legend.text = element_text(size=12),
-        legend.title = element_text(size=14)) +
-  coord_flip() + ylim(-1,1) +
-  xlab(&quot;&quot;) + ylab(&quot;estimate&quot;) + guides(color=guide_legend(&quot;correlation&quot;)) +
-  scale_color_manual(labels = c(&quot;non-phylogenetic&quot;, &quot;phylogenetic&quot;), values = c(&quot;red&quot;, blues9[7])) +
-  scale_x_discrete(labels = c(&quot;N_mass:d13C&quot; = bquote(N[mass]~&quot;~&quot;~delta^13*C),
-                              &quot;N_mass:LMA&quot; = bquote(N[mass]~&quot;~&quot;~&quot;LMA&quot;),
-                              &quot;d13C:LMA&quot; = bquote(delta^13*C~&quot;~&quot;~&quot;LMA&quot;)))
-
-# Q. What can we conclude about the relationship between LA and LMA?</code></pre>
-<p><br />
-</p>
-<div id="multi-level-meta-analysis" class="section level2">
-<h2>Multi-level meta-analysis</h2>
-<p>The models so far have used the simplified data set of species mean
+</div>
+<div id="multilevel-model" class="section level3">
+<h3>Multilevel model</h3>
+<p>So far we have fit models to a simplified data set of species mean
 trait values (one row per species). Pooling data in this way discards
-information, therefore it is preferable to perform analyses on
-observation level data. Due to the complex multi-level structure of
-records (multiple observations on multiple taxa from multiple studies),
-we must specify additional random effects to correctly capture this
-structural hierarchy. For such an analysis, we can use the value of
-<code>replicates</code> associated with each record to weight
-observations during model fit.</p>
+information; it is always preferable to perform analyses on the lowest
+possible level of observed data. To handle the complex cross-classified
+structure of records in our data (multiple observations on multiple taxa
+from multiple studies), we need only specify 2 additional random effects
+in our MR-PMM. The first is a non-phylogenetic between-species effect
+<code>taxon</code>, which captures the component of between-species
+(co)variance that is independent of phylogeny. The second is a random
+study effect <code>dataset_id</code>, which captures between-study
+variance. The residual for this model therefore absorbs within-species
+variances and measurement error.</p>
 <pre class="r"><code># only keep rows with data for at least one of the leaf traits (filter out rows with data for none)
-dat_meta &lt;- dat %&gt;%
-  filter(!(is.na(dat$d13C) &amp; is.na(dat$N_mass) &amp; is.na(dat$LMA)), N_mass &gt; -3) %&gt;% 
-  select(id,dataset_id,taxon,phylo,d13C,N_mass,LMA,replicates)
+dat_ml &lt;- dat %&gt;%
+  filter(!(is.na(dat$d13C) &amp; is.na(dat$N_mass) &amp; is.na(dat$LMA))) %&gt;%
+  select(id,dataset_id,taxon,series,d13C,N_mass,LMA,replicates) %&gt;% 
+  mutate(phylo = taxon) # choose which level to model phylo effects</code></pre>
+<p>Now we can fit our multilevel model.</p>
+<pre class="r"><code># specify prior
+p_ml &lt;- list(R = list(V=diag(3),nu=3),
+             G = list(G1=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3)),
+                      G2=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3)),
+                      G3=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3))))
 
-# Plot observation level data and confirm we get the same results from OLS when using species mean trait values
-dat_meta %&gt;% select(N_mass,d13C) %&gt;% plot()
-dat_meta %&gt;% select(N_mass,d13C) %&gt;% na.omit() %&gt;% lm() %&gt;% summary() 
-dat_meta %&gt;% select(N_mass,d13C) %&gt;% na.omit() %&gt;% lm() %&gt;% abline(col=&quot;blue&quot;)
-# Q. How does the slope estimate compare to the previous OLS on species mean trait values?
+#-----------------------------------------------------------------------------------------#
 
-## weights for meta-analysis
-# In order to propagate the uncertainty associated with each observation into the model, we can compute 
-# inverse weights as 1/replicates and pass these into MCMCglmm as measurement error variances (mev) 
-# N.B. this is not strictly correct (there is a scale issue, hence we use 0.1/replicates) but provides 
-# a work around for not being able to pass weights directly to MCMCglmm
-inv_weights &lt;- dat_meta %&gt;% mutate(inv_weights=0.1/as.numeric(replicates)) %&gt;% pull(inv_weights)
 
-# fit multilevel meta-analytic model
-C &lt;- inverseA(phy)$Ainv # inverse phylogenetic covariance matrix
-p_meta &lt;- list(R = list(V=diag(3),nu=3),
-               G = list(G1=list(V=diag(3), nu=3),
-                        G2=list(V=diag(3), nu=3),
-                        G3=list(V=diag(3), nu=3)))
-fit_meta &lt;- MCMCglmm(cbind(N_mass, d13C, LMA) ~ trait-1,
-                     random   = ~us(trait):phylo + # phylo 
-                                 us(trait):taxon + # non-phylo 
+## SPECIES LEVEL ANALYSIS
+
+# inverse phylo covariance matrix
+C &lt;- inverseA(phy)$Ainv
+
+# fit
+fit_ml_mcmcglmm &lt;- MCMCglmm(cbind(N_mass, d13C, LMA) ~ trait-1,
+                     random   = ~us(trait):phylo + # between-species (phylo) 
+                                 us(trait):taxon + # between-species (non-phylo)
                                  idh(trait):dataset_id, # between-study
-                     rcov     = ~idh(trait):units, # within-study (i.e., residual errors)
-                     mev      = c(inv_weights, inv_weights, inv_weights), # inverse weights used in place of sampling variances
+                     rcov     = ~idh(trait):units, # residual error
                      ginv     = list(phylo = C),
                      family   = c(&quot;gaussian&quot;,&quot;gaussian&quot;,&quot;gaussian&quot;),
-                     nitt     = 25000,
+                     nitt     = 55000,
                      burnin   = 5000,
-                     thin     = 20,
-                     data     = as.data.frame(dat_meta),
-                     prior    = p_meta,
+                     thin     = 50,
+                     data     = as.data.frame(dat_ml %&gt;% 
+                                              filter(phylo %in% dimnames(C)[[1]])),
+                     prior    = p_ml,
                      verbose  = FALSE)
-summary(fit_meta)
+summary(fit_ml_mcmcglmm)
+# saveRDS(fit_ml_mcmcglmm, &quot;fit_ml_mcmcglmm.rds&quot;)
 
-# calculate correlations
-# Q. Why do we use &quot;taxon&quot; rather than &quot;units&quot; here?
-mrpmm_cor(fit_meta, &quot;N_mass&quot;, &quot;d13C&quot;, &quot;phylo&quot;, &quot;taxon&quot;, summary = T)[3:4,]
-mrpmm_cor(fit_meta, &quot;N_mass&quot;, &quot;d13C&quot;, &quot;phylo&quot;, &quot;taxon&quot;)[,3:4] %&gt;% mcmc_intervals(prob_outer = 0.95)
 
-# calculate signal (adding additional variance terms in the denominator)
-quantile(fit_meta$VCV[,&quot;traitd13C:traitd13C.phylo&quot;] / 
-        (fit_meta$VCV[,&quot;traitd13C:traitd13C.phylo&quot;] + 
-         fit_meta$VCV[,&quot;traitd13C:traitd13C.taxon&quot;] +
-         fit_meta$VCV[,&quot;traitd13C.dataset_id&quot;] +
-         fit_meta$VCV[,&quot;traitd13C.units&quot;]), probs = c(0.025, 0.5, 0.975))
+#-----------------------------------------------------------------------------------------#
 
-# Q. The signal in d13C is considerably lower than in our initial model (fit_MR). What might be the cause?
-# A. We are now modelling within- and between-study variances. The latter appears to be particularly important
-#    for d13C as these effects explain more variation in d13C than any other variance component.
+## SERIES LEVEL ANALYSIS
 
-# large variation between studies in the range of d13C values reported. Two potential explanations are  
-# 1) taxonomic bias in species included within each study, and 2) differences in measurement technique.
-dat_meta %&gt;% ggplot(aes(x = dataset_id, y = d13C)) + geom_point() + theme_classic() + theme(axis.text.x = element_blank())</code></pre>
+# inverse phylogenetic covariance matrix
+C &lt;- inverseA(tree_samp[[1]])$Ainv
+
+# fit
+fit_ml_series_mcmcglmm &lt;- MCMCglmm(cbind(N_mass, d13C, LMA) ~ trait-1,
+                     random   = ~us(trait):phylo + # between-series (phylo) 
+                                 us(trait):taxon + # between-species (non-phylo)
+                                 idh(trait):dataset_id, # between-study
+                     rcov     = ~idh(trait):units, # residual error
+                     ginv     = list(phylo = C),
+                     family   = c(&quot;gaussian&quot;,&quot;gaussian&quot;,&quot;gaussian&quot;),
+                     nitt     = 55000,
+                     burnin   = 5000,
+                     thin     = 50,
+                     data     = as.data.frame(dat_ml %&gt;% 
+                                              mutate(phylo = series) %&gt;% 
+                                              filter(phylo %in% tree_samp[[1]]$tip.label)),
+                     prior    = p_ml,
+                     verbose  = FALSE)
+summary(fit_ml_series_mcmcglmm)
+# saveRDS(fit_ml_series_mcmcglmm, &quot;fit_ml_series_mcmcglmm.rds&quot;)</code></pre>
+<p>Using <code>brms</code>, we can directly weight observations
+according to the number of replicates via the <code>weights()</code>
+argument in the model formulae.</p>
+<pre class="r"><code>## Species level
+
+# phylo vcv
+C &lt;- vcv.phylo(phy, corr = T)
+
+# formulae
+bf_y1 &lt;- brmsformula(N_mass | weights(replicates) + mi() ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|taxon) + (1|dataset_id))
+bf_y2 &lt;- brmsformula(d13C   | weights(replicates) + mi() ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|taxon) + (1|dataset_id))
+bf_y3 &lt;- brmsformula(LMA    | weights(replicates) + mi() ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|taxon) + (1|dataset_id))
+
+# fit
+fit_ml_brms &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(FALSE),
+              data    = dat_ml %&gt;% mutate(phylo = taxon) %&gt;% filter(taxon %in% phy$tip.label), 
+              family  = gaussian(), 
+              data2   = list(C = C),
+              control = list(adapt_delta = 0.95, max_treedepth = 12),
+              cores   = 4, 
+              chains  = 4)
+# saveRDS(fit_ml_brms, &quot;fit_ml_brms.rds&quot;)
+
+
+#----------------------------------------------------------------------------------------------#
+
+## Series level
+
+# phylo vcv
+C &lt;- vcv.phylo(tree_samp[[1]], corr = T)
+
+# fit
+fit_ml_series_brms &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(FALSE),
+              data    = dat_ml %&gt;% mutate(phylo = series) %&gt;% filter(series %in% tree_samp[[1]]$tip.label), 
+              family  = gaussian(), 
+              data2   = list(C = C),
+              control = list(adapt_delta = 0.95, max_treedepth = 12),
+              cores   = 4, 
+              chains  = 4)
+saveRDS(fit_ml_series_brms, &quot;fit_ml_series_brms.rds&quot;)</code></pre>
+<p><br />
+</p>
 </div>
-<div id="model-validation" class="section level2">
-<h2>Model Validation</h2>
+</div>
+<div id="inference" class="section level1">
+<h1>Inference</h1>
+<p>So, what does our multilevel MR-PMM tell us about the relationships
+between these leaf traits in Eucalyptus? In the model summary for
+<code>MCMCglmm</code>, the intercepts for each trait are reported as
+location effects, the phylogenetic (co)variances under
+<code>phylo</code> and the residual (co)variances under
+<code>units</code>. We can also see that some parameters, particularly
+for <code>d13C</code>, have low ESS indicating some convergence
+issues.</p>
+<pre class="r"><code>fit_ml_mcmcglmm %&gt;% summary</code></pre>
+<div id="multilevel-correlations" class="section level3">
+<h3>Multilevel Correlations</h3>
+<p>In order to make meaningful comparisons, we must calculate
+correlations (scaled covariance) between traits. We will do this using
+the custom function <code>mrpmm_cor()</code>(which takes a
+<code>MCMCglmm</code> model fit and calculates correlations between the
+response variables at the levels specified).</p>
+<pre class="r"><code># select model
+fit_ml &lt;- fit_ml_mcmcglmm
+phylo &lt;- &quot;phylo&quot;
+
+
+# extract samples from multilevel model fit
+mod_res &lt;- cbind(cbind(mrpmm_cor(fit_ml, &quot;N_mass&quot;, &quot;d13C&quot;, phylo, &quot;taxon&quot;)[,3:4],
+                       mrpmm_cor(fit_ml, &quot;N_mass&quot;, &quot;LMA&quot;, phylo, &quot;taxon&quot;)[,3:4],
+                       mrpmm_cor(fit_ml, &quot;d13C&quot;,   &quot;LMA&quot;, phylo, &quot;taxon&quot;)[,3:4]))
+names(mod_res) &lt;- c(&quot;N_mass:d13C_phy&quot;,&quot;N_mass:d13C_ind&quot;,
+                    &quot;N_mass:LMA_phy&quot;,&quot;N_mass:LMA_ind&quot;,
+                    &quot;d13C:LMA_phy&quot;,&quot;d13C:LMA_ind&quot;)
+
+#-----------------------------------------------------------------------------------------#</code></pre>
+<p>We will then use functions from the <code>tidybayes</code> package to
+plot the posteriors of our correlation estimates.</p>
+<pre class="r"><code>## CORRELATION PLOT
+
+# set theme
+theme_set(theme_classic())
+
+# build plot
+p1 &lt;- mod_res %&gt;%
+  as_tibble %&gt;% 
+  mutate(.chain = 1, .iteration = 1:nrow(fit_ml$Sol), .draw = 1:nrow(fit_ml$Sol)) %&gt;% 
+  pivot_longer(1:6, names_to = &quot;parameter&quot;, values_to = &quot;estimate&quot;) %&gt;%
+  mutate(level = ifelse(str_detect(parameter, &quot;_phy&quot;), &quot;phylogenetic&quot;,&quot;between-species&quot;),
+         parameter = str_replace(parameter, &quot;_phy&quot;, &quot;&quot;),
+         parameter = str_replace(parameter, &quot;_ind&quot;, &quot;&quot;)) %&gt;% 
+  ggplot(aes(x = estimate, 
+             y = factor(parameter, levels=c(&quot;N_mass:LMA&quot;,&quot;d13C:LMA&quot;,&quot;N_mass:d13C&quot;)),
+             col = factor(level, levels = c(&quot;phylogenetic&quot;, &quot;between-species&quot;)), 
+             fill = factor(level, levels = c(&quot;phylogenetic&quot;, &quot;between-species&quot;)))) +
+  stat_halfeye(position = position_dodge(width = 0.4), 
+               slab_alpha = 0.5, 
+               fatten_point = 3) +
+  geom_vline(xintercept=0, linetype=&quot;dashed&quot;) +
+    theme(axis.text = element_text(size=18),
+        axis.title.x = element_text(size=20),
+        legend.text = element_text(size=18),
+        legend.title = element_text(size=20),
+        plot.margin = margin(0.2,0.2,0.2,0.2, &quot;cm&quot;)) +
+  xlim(-1,1) +
+  ylab(&quot;&quot;) + xlab(&quot;&quot;) + guides(color=&quot;none&quot;,fill=guide_legend(title=&quot;level&quot;)) +
+  scale_color_manual(values=c(&quot;#00447c&quot;, &quot;#c1549c&quot;)) +
+  scale_fill_manual(values=c( &quot;#00447c&quot;, &quot;#c1549c&quot;)) +
+  scale_y_discrete(labels = c(&quot;N_mass:d13C&quot; = bquote(cor(N[mass]*&quot;,&quot;~delta^13*C)),
+                              &quot;N_mass:LMA&quot; = bquote(cor(&quot;LMA&quot;*&quot;,&quot;~N[mass])),
+                              &quot;d13C:LMA&quot; = bquote(cor(&quot;LMA&quot;*&quot;,&quot;~delta^13*C))))
+p1  </code></pre>
+<p>The model reports a positive phylogenetic correlation between LMA and
+<span class="math inline">\(\delta\prescript{13}{}{\mathbf{C}}\)</span>,
+and negative phylogenetic correlations between these traits and <span class="math inline">\(\mathbf{N}_{\mathrm{mass}}\)</span>, indicating
+conserved co-evolutionary relationships. Between-species correlations
+with LMA show a consistent direction across both phylogenetic and
+non-phylogenetic levels. In contrast, the between-species correlation
+for <code>d13C</code> and <code>N_mass</code> is negative on the
+photogenic level and positive on the taxon (non-phylogenetic) level.
+This situation highlights an important strength of MR-PMM; the capacity
+to disentangle trait relationships operating at different levels in the
+model hierarchy.</p>
+<p><br />
+</p>
+</div>
+<div id="variance-decomposition" class="section level3">
+<h3>Variance Decomposition</h3>
+<p>We can also examine the variance decomposition of each trait to
+better understand how different sources of variation contribute to
+overall trait variances. First we calculate the total posterior variance
+for each trait by adding variance components, then decompose this
+variance into the proportion of variance explained by each
+component.</p>
+<pre class="r"><code># calculate total variance for each trait
+LMA_var &lt;- fit_ml$VCV[,&quot;traitLMA:traitLMA.phylo&quot;] + 
+           fit_ml$VCV[,&quot;traitLMA:traitLMA.taxon&quot;] +
+           fit_ml$VCV[,&quot;traitLMA.dataset_id&quot;] +
+           fit_ml$VCV[,&quot;traitLMA.units&quot;]
+N_mass_var &lt;- fit_ml$VCV[,&quot;traitN_mass:traitN_mass.phylo&quot;] + 
+           fit_ml$VCV[,&quot;traitN_mass:traitN_mass.taxon&quot;] +
+           fit_ml$VCV[,&quot;traitN_mass.dataset_id&quot;] +
+           fit_ml$VCV[,&quot;traitN_mass.units&quot;]
+d13C_var &lt;- fit_ml$VCV[,&quot;traitd13C:traitd13C.phylo&quot;] + 
+           fit_ml$VCV[,&quot;traitd13C:traitd13C.taxon&quot;] +
+           fit_ml$VCV[,&quot;traitd13C.dataset_id&quot;] +
+           fit_ml$VCV[,&quot;traitd13C.units&quot;]
+
+# calculate the proportion of variance explained by each level across traits 
+data_stack &lt;- data.frame(
+    trait = rep(c(&quot;LMA&quot;,&quot;N_mass&quot;,&quot;d13C&quot;), each=4),
+    level = rep(c(&quot;phylogenetic&quot;,&quot;between-species&quot;,&quot;between-study&quot;,&quot;residual&quot;),3),
+    post_mode = c(mean(fit_ml$VCV[,&quot;traitLMA:traitLMA.phylo&quot;]/LMA_var),
+                  mean(fit_ml$VCV[,&quot;traitLMA:traitLMA.taxon&quot;]/LMA_var),
+                  mean(fit_ml$VCV[,&quot;traitLMA.dataset_id&quot;]/LMA_var),
+                  mean(fit_ml$VCV[,&quot;traitLMA.units&quot;]/LMA_var),
+                  mean(fit_ml$VCV[,&quot;traitN_mass:traitN_mass.phylo&quot;]/N_mass_var),
+                  mean(fit_ml$VCV[,&quot;traitN_mass:traitN_mass.taxon&quot;]/N_mass_var),
+                  mean(fit_ml$VCV[,&quot;traitN_mass.dataset_id&quot;]/N_mass_var),
+                  mean(fit_ml$VCV[,&quot;traitN_mass.units&quot;]/N_mass_var),
+                  mean(fit_ml$VCV[,&quot;traitd13C:traitd13C.phylo&quot;]/d13C_var),
+                  mean(fit_ml$VCV[,&quot;traitd13C:traitd13C.taxon&quot;]/d13C_var),
+                  mean(fit_ml$VCV[,&quot;traitd13C.dataset_id&quot;]/d13C_var),
+                  mean(fit_ml$VCV[,&quot;traitd13C.units&quot;]/d13C_var))
+)</code></pre>
+<p>We can then build these estimates into a stacked bargraph,</p>
+<pre class="r"><code>## VARIANCE DECOMPOSITION PLOT
+
+# stacked bar graph
+p2 &lt;- ggplot(data_stack %&gt;% 
+               mutate(post_mode = round(post_mode,2), 
+                      post_mode = ifelse(trait == &quot;N_mass&quot; &amp; level == &quot;phylogenetic&quot;, 0.49,post_mode)), # deal with rounding error
+             aes(x = factor(trait, levels=c(&quot;LMA&quot;,&quot;N_mass&quot;,&quot;d13C&quot;)),
+                 y = post_mode, 
+                 fill = factor(level, 
+                               levels=rev(c(&quot;phylogenetic&quot;,&quot;between-species&quot;,&quot;between-study&quot;,&quot;residual&quot;))),
+                 label = post_mode)) + 
+    geom_bar(position=&quot;fill&quot;, stat=&quot;identity&quot;) +
+    geom_text(col=&quot;white&quot;, size = 5, position = position_stack(vjust = 0.5)) +
+    scale_fill_manual(values=rev(c(&quot;#00447c&quot;,&quot;#c1549c&quot;,&quot;#fb836f&quot;,&quot;#FFA600&quot;))) +
+    guides(fill=guide_legend(&quot;&quot;)) +
+    theme(axis.text = element_text(size=18),
+          axis.title.y = element_text(size=20),
+          legend.text= element_text(size=18),
+          plot.margin = margin(0.2,1,0.2,0.2, &quot;cm&quot;)) +
+    ylab(&quot;proportion of variance&quot;) + xlab(&quot;&quot;) + 
+    scale_x_discrete(labels = c(&quot;N_mass&quot; = bquote(N[mass]),
+                              &quot;d13C&quot; = bquote(delta^13*C)))</code></pre>
+<p>and plot together as a panel.</p>
+<pre class="r"><code># plot together in panel
+ggarrange(p2, p1, widths = c(0.4,0.6), common.legend = T)</code></pre>
+<p><br />
+</p>
+</div>
+<div id="partial-correlations" class="section level3">
+<h3>Partial Correlations</h3>
+<p>Finally, we can use the fitted covariance matrices to derive partial
+correlations.</p>
+<pre class="r"><code>mod &lt;- fit_ml_mcmcglmm
+phylo &lt;- &quot;phylo&quot;
+
+result_list &lt;- cbind(mod$Sol, mod$VCV) %&gt;% as_tibble %&gt;% mutate(tree = 1) %&gt;% relocate(tree)
+
+# combine
+res &lt;- result_list %&gt;% bind_rows() %&gt;% as.matrix() %&gt;% as_tibble()
+
+# extract VCV components
+vcv &lt;- res %&gt;% 
+  select(contains(&quot;:&quot;))# select VCV components
+
+# # r hat diagnostic (rhat on combined posterior not great, but for any given tree rhat is good)
+chains = vcv %&gt;% as.data.frame()
+chains %&gt;% map_dbl(rstan::Rhat) %&gt;% {.[.&gt;1.05]}
+
+# calculate correlations  
+n_resp = 3
+cor_list &lt;- level_cor_vcv(vcv, n_resp, part.1 = phylo, part.2 = &quot;taxon&quot;, lambda = NULL)
+level_cor &lt;- gsub(&quot;_cor&quot;, &quot;&quot;, names(cor_list$posteriors)) # different levels correlations are estimated at</code></pre>
+<p>We can use the <code>igraph</code> package to plot pairwise
+correlations as a network.</p>
+<pre class="r"><code>## NETWORK GRAPH
+
+# choose level to calculate result
+level_cor
+level &lt;- &quot;phy&quot;
+
+# calculate
+cor &lt;- paste0(level,&quot;_cor&quot;)
+mat &lt;- paste0(level,&quot;_mat&quot;)
+sig.95 &lt;- cor_list$posteriors[[cor]] %&gt;% summarise_all(~ quantile(., prob=c(0.025,0.975)) %&gt;% {. &gt; 0} %&gt;% table %&gt;% length == 1) %&gt;% t() %&gt;% as_tibble %&gt;% mutate(sig.95 = V1, edge = 1:((n_resp^2-n_resp)/2)) %&gt;% select(-V1)
+sig.80 &lt;- cor_list$posteriors[[cor]] %&gt;% summarise_all(~ quantile(., prob=c(0.1,0.90)) %&gt;% {. &gt; 0} %&gt;% table %&gt;% length == 1) %&gt;% t() %&gt;% as_tibble %&gt;% mutate(sig.80 = V1, edge = 1:((n_resp^2-n_resp)/2)) %&gt;% select(-V1)
+sig &lt;- left_join(sig.95, sig.80, by = &quot;edge&quot;) %&gt;% mutate(mean = cor_list$posteriors[[cor]] %&gt;% summarise_all(~ mean(.)) %&gt;% t %&gt;% as.vector)
+sig &lt;- sig %&gt;% mutate(col = ifelse(sig.80 == T &amp; sig.95 != T &amp; mean &gt; 0, &quot;lightblue&quot;,
+                            ifelse(sig.80 == T &amp; sig.95 == T &amp; mean &gt; 0, &quot;blue&quot;,
+                            ifelse(sig.80 == T &amp; sig.95 != T &amp; mean &lt; 0, &quot;pink&quot;, &quot;red&quot;))),
+                     lty = ifelse(sig.80 == T &amp; sig.95 != T &amp; mean &gt; 0, &quot;dotted&quot;,
+                            ifelse(sig.80 == T &amp; sig.95 == T &amp; mean &gt; 0, &quot;solid&quot;,
+                            ifelse(sig.80 == T &amp; sig.95 != T &amp; mean &lt; 0, &quot;dotted&quot;, &quot;solid&quot;))))
+cor_mat &lt;- cor_list$matrices[[mat]]
+dimnames(cor_mat)[[1]] &lt;- c(&quot;N mass&quot;,&quot;leaf\nd13C&quot;,&quot;LMA&quot;)
+dimnames(cor_mat)[[2]] &lt;- c(&quot;N mass&quot;,&quot;leaf\nd13C&quot;,&quot;LMA&quot;)
+diag(cor_mat) &lt;- 0
+g &lt;- igraph::graph_from_adjacency_matrix (cor_mat, weighted=TRUE, mode=&quot;upper&quot;)
+igraph::E(g)$weight &lt;- abs(t(cor_mat[lower.tri(t(cor_mat))]))
+g &lt;- delete.edges(g, igraph::E(g)[sig %&gt;% filter(sig.80 == F) %&gt;% pull(edge)]) # delete no-sig edges
+plot(g,
+     layout = layout.circle,
+     vertex.size=32,
+     edge.width=(abs(igraph::E(g)$weight)^1.25)*10,
+     edge.color=ifelse((cor_mat &gt; 0)[lower.tri(cor_mat)][sig %&gt;% filter(sig.80 == T) %&gt;% pull(edge)], &quot;blue&quot;,&quot;red&quot;),
+     edge.lty=sig %&gt;% filter(sig.80 == T) %&gt;% pull(lty))
+
+
+#-----------------------------------------------------------------------#</code></pre>
+<p><br />
+</p>
+</div>
+</div>
+<div id="priors" class="section level1">
+<h1>Priors</h1>
+<div id="regularising-correlation-estimates" class="section level3">
+<h3>Regularising correlation estimates</h3>
+<p>Because Brownian Motion is a noisy process, estimates of phylogenetic
+correlations are generally associated with high uncertainty. One way to
+improve precision is to impose a regularizing prior which shrinks
+estimates toward zero. When applied to correlation coefficients, this
+has the effect of focusing our inference on the strongest trait
+relationships in our data.</p>
+<pre class="r"><code>## Series level
+
+# phylo vcv
+C &lt;- vcv.phylo(phy, corr = T)
+
+# get prior for model
+get_prior(formula =  bf_y1 + bf_y2 + bf_y3 + set_rescor(FALSE), 
+          data = dat_ml,
+          data2 = list(C = C))
+
+# set higher eta value for LKJ prior on phylo correlations
+p_lkj &lt;- prior(lkj(3), class = cor, group = phylo)
+
+# fit
+fit_ml_lkj_brms &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(FALSE),
+              data    = dat_ml %&gt;% mutate(phylo = taxon) %&gt;% filter(taxon %in% phy$tip.label), 
+              family  = gaussian(), 
+              data2   = list(C = C),
+              prior   = p_lkj,
+              control = list(adapt_delta = 0.95, max_treedepth = 12),
+              cores   = 4, 
+              chains  = 4)
+# saveRDS(fit_ml_lkj_brms, &quot;fit_ml_lkj_brms.rds&quot;)
+
+#-------------------------------------------------------------------------------------------#
+
+
+## Series level
+
+# phylo vcv
+C &lt;- vcv.phylo(tree_samp[[1]], corr = T)
+
+# model formulae
+bf_y1 &lt;- brmsformula(N_mass | weights(replicates) + mi() ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|taxon) + (1|dataset_id))
+bf_y2 &lt;- brmsformula(d13C   | weights(replicates) + mi() ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|taxon) + (1|dataset_id))
+bf_y3 &lt;- brmsformula(LMA    | weights(replicates) + mi() ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|taxon) + (1|dataset_id))
+
+# fit
+fit_ml_series_lkj_brms &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(FALSE),
+              data    = dat_ml %&gt;% mutate(phylo = series) %&gt;% filter(series %in% tree_samp[[1]]$tip.label), 
+              family  = gaussian(), 
+              data2   = list(C = C),
+              prior   = p_lkj,
+              control = list(adapt_delta = 0.95, max_treedepth = 12),
+              cores   = 4, 
+              chains  = 4)
+# saveRDS(fit_ml_series_lkj_brms, &quot;fit_ml_series_lkj_brms.rds&quot;)</code></pre>
+<p><br />
+</p>
+</div>
+</div>
+<div id="model-diagnostics-and-validation" class="section level1">
+<h1>Model Diagnostics and Validation</h1>
 <p>We explore two approaches to model validation: 1) we assessed
-within-sample predictive capacity using marginal and conditional
-posterior predictive checks; and 2) we assessed out-of-sample predictive
-capacity using LOO-CV.</p>
-<p>First, we define some convenience functions.</p>
+within-sample predictive capacity using posterior predictive checks; and
+2) we assessed out-of-sample predictive capacity using LOO-CV.</p>
+<p>First, we choose a <code>brms</code> model fit and define the
+parameter estimates we wish to validate.</p>
 <pre class="r"><code># choose model
-fit &lt;- fit_MR_2
+fit &lt;- fit_ml_brms
 
-# time to fit (seconds): slowest chain of four
-rstan::get_elapsed_time(fit$fit) %&gt;% apply(1,sum) %&gt;% max
-
-# names of model parameters, excluding random effects and log-probability
-pars &lt;- fit %&gt;% as_tibble %&gt;% select(-starts_with(&quot;r_&quot;),-&quot;lp__&quot;) %&gt;% names
-r_pars &lt;- fit %&gt;% as_tibble %&gt;% select(starts_with(&quot;r_&quot;)) %&gt;% names
-
-#------------------------
-# functions
-#------------------------
-
-# specify dplyr select function
-select &lt;- dplyr::select
-
-# calculate coverage
-get_coverage &lt;- function(data) data %&gt;%
-  transmute(cov90 = (hh &gt;= y_obs) &amp; (ll &lt;= y_obs),
-            cov50 = (h &gt;= y_obs) &amp; (l &lt;= y_obs)) %&gt;% 
-  map_dbl(sum) %&gt;% `/`(nrow(data)) %&gt;% `*`(100) %&gt;% round(.,1)
-
-# plot predictions
-plot_pred &lt;- function(x, y_obs = NULL, cov, ylab = NULL, xlab = NULL, title = NULL, subtitle = FALSE, arrange = FALSE) {
-  if(!is.null(y_obs)) x &lt;- x %&gt;% mutate(y_obs = y_obs)
-  if(arrange == TRUE) x &lt;- x %&gt;% arrange(m)
-  x %&gt;%  
-  mutate(x = 1:n()) %&gt;% 
-  ggplot(aes(x)) +
-  geom_linerange(aes(ymin = ll, ymax = hh), size = 1, col = blues9[3]) +
-  geom_linerange(aes(ymin = l, ymax = h), size = 1, col = blues9[5]) +
-    geom_point(aes(y=m), size = 2, col = blues9[7]) +
-  geom_point(aes(y = y_obs), size = 2) +
-  theme_classic() +
-  theme(plot.subtitle = element_text(size = 10)) +
-  labs(x = xlab,
-       y = ylab,
-       title = title,
-       subtitle = ifelse(subtitle == TRUE, paste(&quot;Coverage: &quot;, cov[1], &quot;% at 90th quantile, &quot;,cov[2],&quot;% at 50th quantile&quot;), &quot;&quot;))
-}</code></pre>
+# relevant model parameters (exclude random effects and log-probability)
+pars &lt;- fit %&gt;% as_tibble %&gt;%
+  select(-starts_with(&quot;r_&quot;),-starts_with(&quot;lp&quot;),-starts_with(&quot;Intercept&quot;)) %&gt;% names;pars
+r_pars &lt;- fit %&gt;% as_tibble %&gt;% select(starts_with(&quot;r_&quot;)) %&gt;% names; r_pars</code></pre>
 <p><br />
 </p>
-<p>Models fit in <code>brms</code> benefits from seemless compatability
-with the powerful <code>Bayesplot</code> package for visualising MCMC
-chains and model diagnostics.</p>
-<pre class="r"><code>#------------------------
-# convergence diagnostics
-#------------------------
-mcmc_trace(fit, pars = pars)
-mcmc_rhat(rhat(fit, pars = r_pars))
-mcmc_neff(neff_ratio(fit, pars = r_pars))
+<div id="convergence-diagnostics" class="section level3">
+<h3>Convergence Diagnostics</h3>
+<p>Diagnostics for models fit in <code>brms</code> are easily obtained
+via dependent functions. In this case, rhat values indicate convergence
+issues for some study effects (especially for d13C), and a bulk ESS plot
+shows that some parameters have low ESS (though inspection of the ess
+tibble shows these are mostly for data).</p>
+<pre class="r"><code># rhat diagnostics
+rhat &lt;- rhat(fit, pars = r_pars)
+rhat[rhat &gt; 1.1] # convergence issues for study effects (especially for d13C)
 
-rstan::check_hmc_diagnostics(fit$fit)</code></pre>
+# HMC diagnostics
+rstan::check_hmc_diagnostics(fit$fit)
+
+# Effective Sample Size (ESS)
+ess &lt;-
+  fit %&gt;%
+  as_tibble %&gt;%
+  select(all_of(pars)) %&gt;%
+  map_dbl(ess_bulk) # map ESS for each parameter
+
+tibble(ess = ess, par = names(ess)) %&gt;%
+  ggplot(aes(y = par, x = ess))+
+  geom_linerange(aes(xmin = 0, xmax = ess)) +
+  geom_point() +
+  geom_vline(xintercept = 400, col = &quot;grey30&quot;, linetype = &quot;dashed&quot;) +
+  theme(axis.text.y = element_blank()) +
+  labs(y = NULL, title = &quot;Bulk effective sample size (ess)&quot;)
+
+ess[ess &lt; 100]</code></pre>
 <p><br />
 </p>
+</div>
+<div id="validation" class="section level3">
+<h3>Validation</h3>
 <p>For the first approach to model validation, posterior predictive
 checks verify the capacity of the model to generate plausible data; the
 proportion of data included in the nominal predictive intervals is
 generally close to expectation for each method and response trait.</p>
-<pre class="r"><code>#----------------------------
-# posterior predictive checks
-#----------------------------
+<pre class="r"><code>## posterior predictive checks
 
-# CONDITIONAL - prediction conditional on species-level random-intercept estimates
-ppC1 &lt;- pp_check(fit, resp= &quot;Nmass&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: N_mass&quot;)
-ppC2 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: d13C&quot;)
-ppC3 &lt;- pp_check(fit, resp= &quot;LMA&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: LMA&quot;)
-
-covC1 &lt;- get_coverage(ppC1$data)
-covC2 &lt;- get_coverage(ppC2$data)
-covC3 &lt;- get_coverage(ppC3$data)
-
-ggarrange(plot_pred(ppC1$data %&gt;% select(6:10), ppC1$data$y_obs, covC1, &quot;N_mass&quot;, arrange = TRUE),
-          plot_pred(ppC2$data %&gt;% select(6:10), ppC2$data$y_obs, covC2, &quot;d13C&quot;, arrange = TRUE),
-          plot_pred(ppC3$data %&gt;% select(6:10), ppC3$data$y_obs, covC3, &quot;LMA&quot;, arrange = TRUE),
-          ncol = 1)
-
-# MARGINAL - prediction marginalised over Gaussian distribution of phylogenetic random effects
-ppM1 &lt;- pp_check(fit, resp= &quot;Nmass&quot;, type = &quot;intervals&quot;, allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;, newdata = fit$data %&gt;% mutate(phylo = NA))
-ppM2 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;, allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;, newdata = fit$data %&gt;% mutate(phylo = NA))
-ppM3 &lt;- pp_check(fit, resp= &quot;LMA&quot;, type = &quot;intervals&quot;, allow_new_levels = T, sample_new_levels = &quot;gaussian&quot;, newdata = fit$data %&gt;% mutate(phylo = NA))
-
-covM1 &lt;- get_coverage(ppM1$data)
-covM2 &lt;- get_coverage(ppM2$data)
-covM3 &lt;- get_coverage(ppM3$data)
+# prediction conditional on species-level random-intercept estimates
+ppA1 &lt;- pp_check(fit, resp= &quot;LMA&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: LMA&quot;)
+ppA2 &lt;- pp_check(fit, resp= &quot;Nmass&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: Nmass&quot;)
+ppA3 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;) + labs(subtitle = &quot;Response: d13C&quot;)
 
 # arrange by predictive mean of the conditional model
-ppM1$data &lt;- ppM1$data %&gt;% arrange(match(y_id, ppC1$data %&gt;% arrange(m) %&gt;% pull(y_id)))
-ppM2$data &lt;- ppM2$data %&gt;% arrange(match(y_id, ppC2$data %&gt;% arrange(m) %&gt;% pull(y_id)))
-ppM3$data &lt;- ppM3$data %&gt;% arrange(match(y_id, ppC3$data %&gt;% arrange(m) %&gt;% pull(y_id)))
+ppA1$data &lt;- ppA1$data %&gt;% arrange(match(y_id, ppA1$data %&gt;% arrange(m) %&gt;% pull(y_id)))
+ppA2$data &lt;- ppA2$data %&gt;% arrange(match(y_id, ppA2$data %&gt;% arrange(m) %&gt;% pull(y_id)))
+ppA3$data &lt;- ppA3$data %&gt;% arrange(match(y_id, ppA3$data %&gt;% arrange(m) %&gt;% pull(y_id)))
 
-ggarrange(plot_pred(ppM1$data %&gt;% select(6:10), ppM1$data$y_obs, covM1, &quot;N_mass&quot;),
-          plot_pred(ppM2$data %&gt;% select(6:10), ppM2$data$y_obs, covM2, &quot;d13C&quot;),
-          plot_pred(ppM3$data %&gt;% select(6:10), ppM3$data$y_obs, covM3, &quot;LMA&quot;),
-          ncol = 1)
+# calculate coverage
+covA1 &lt;- round(get_coverage(ppA1$data),1)
+covA2 &lt;- round(get_coverage(ppA2$data),1)
+covA3 &lt;- round(get_coverage(ppA3$data),1)
 
-# FIXED EFFECTS ONLY - (i.e., ignore random effects by setting them to zero)
-ppF1 &lt;- pp_check(fit, resp= &quot;Nmass&quot;, type = &quot;intervals&quot;, re_formula = NA) + labs(subtitle = &quot;Response: N_mass&quot;)
-ppF2 &lt;- pp_check(fit, resp= &quot;d13C&quot;, type = &quot;intervals&quot;, re_formula = NA) + labs(subtitle = &quot;Response: d13C&quot;)
-ppF3 &lt;- pp_check(fit, resp= &quot;LMA&quot;, type = &quot;intervals&quot;, re_formula = NA) + labs(subtitle = &quot;Response: LMA&quot;)
-
-covF1 &lt;- get_coverage(ppF1$data)
-covF2 &lt;- get_coverage(ppF2$data)
-covF3 &lt;- get_coverage(ppF3$data)
-
-# arrange by predictive mean of the conditional model
-ppF1$data &lt;- ppF1$data %&gt;% arrange(match(y_id, ppC1$data %&gt;% arrange(m) %&gt;% pull(y_id)))
-ppF2$data &lt;- ppF2$data %&gt;% arrange(match(y_id, ppC2$data %&gt;% arrange(m) %&gt;% pull(y_id)))
-ppF3$data &lt;- ppF3$data %&gt;% arrange(match(y_id, ppC3$data %&gt;% arrange(m) %&gt;% pull(y_id)))
-
-ggarrange(plot_pred(ppF1$data %&gt;% select(6:10), ppF1$data$y_obs, covF1, &quot;N_mass&quot;),
-          plot_pred(ppF2$data %&gt;% select(6:10), ppF2$data$y_obs, covF2, &quot;d13C&quot;),
-          plot_pred(ppF3$data %&gt;% select(6:10), ppF3$data$y_obs, covF3, &quot;LMA&quot;),
+# plot
+ggarrange(plot_pred(ppA1$data %&gt;% select(6:10), ppA1$data$y_obs, cov = covA1, &quot;LMA&quot;, subtitle = F) ,
+          plot_pred(ppA2$data %&gt;% select(6:10), ppA2$data$y_obs, cov = covA2, &quot;Nmass&quot;, subtitle = F),
+          plot_pred(ppA3$data %&gt;% select(6:10), ppA3$data$y_obs, cov = covA3, &quot;d13C&quot;, subtitle = F),
           ncol = 1)</code></pre>
-<p><br />
-</p>
+<p>We can perform residual analysis by building a qq plot</p>
+<pre class="r"><code>## Residual analysis
+
+pe1 &lt;- predictive_error(fit, resp = &quot;LMA&quot;) %&gt;% as.data.frame()
+pe2 &lt;- predictive_error(fit, resp = &quot;Nmass&quot;) %&gt;% as.data.frame()
+pe3 &lt;- predictive_error(fit, resp = &quot;d13C&quot;) %&gt;% as.data.frame()
+
+lbs &lt;- labs(x = &quot;Theoretical Quantiles&quot;,
+            y = &quot;Sample Quantiles&quot;)
+
+# qq pnorm plots
+ggarrange(
+  tibble(y = pe1 %&gt;% map_dbl(mean)) %&gt;%
+  ggplot(aes(sample = y)) +
+  stat_qq(alpha = 0.5) + stat_qq_line() +
+    lbs + labs(title= &quot;LMA&quot;),
+  tibble(y = pe2 %&gt;% map_dbl(mean)) %&gt;%
+  ggplot(aes(sample = y)) +
+  stat_qq(alpha = 0.5) + stat_qq_line() +
+    lbs + labs(title= &quot;Nmass&quot;),
+tibble(y = pe3 %&gt;% map_dbl(mean)) %&gt;%
+  ggplot(aes(sample = y)) +
+  stat_qq(alpha = 0.5) + stat_qq_line() +
+  lbs + labs(title= &quot;d13C&quot;),
+nrow = 1)</code></pre>
 <p>For LOO-CV, we find the approximate method <span class="citation">(Bürkner, Gabry, and Vehtari 2021)</span> fails for a
 small proportion of the data (especially for LMA), necessitating manual
 re-fits of the model. The computational demand of re-fitting such a
@@ -2264,118 +2664,138 @@ large model for more than a few troublesome test data points is probably
 not feasible for the average desktop workstation. However, as HPC
 becomes more accessible to the average researcher, manual re-fitting
 procedures may represent a viable option to LOO-CV of MR-PMM.</p>
-<pre class="r"><code>#----------------
-# loo predictions
-#----------------
+<pre class="r"><code>## LOO-CV predictions
 
-# draw posterior samples
-ppred &lt;- posterior_predict(fit)
-ppred1 &lt;- ppred[,,1] # N_mass
-ppred2 &lt;- ppred[,,2] # d13C
-ppred3 &lt;- ppred[,,3] # LMA
+# choose model
+fit &lt;- fit_mean_series_brms
 
-# compute importance sampling weights
-log_ratios1 &lt;- -1*log_lik(fit, resp = &quot;Nmass&quot;)
-log_ratios2 &lt;- -1*log_lik(fit, resp = &quot;d13C&quot;)
-log_ratios3 &lt;- -1*log_lik(fit, resp = &quot;LMA&quot;)
-r_eff1 &lt;- loo::relative_eff(exp(-log_ratios1), chain_id = rep(1:4, each = 1000))
-r_eff2 &lt;- loo::relative_eff(exp(-log_ratios2), chain_id = rep(1:4, each = 1000))
-r_eff3 &lt;- loo::relative_eff(exp(-log_ratios3), chain_id = rep(1:4, each = 1000))
-psis1 &lt;- loo::psis(log_ratios1, cores = 10, r_eff = r_eff1)
-psis2 &lt;- loo::psis(log_ratios2, cores = 10, r_eff = r_eff2)
-psis3 &lt;- loo::psis(log_ratios3, cores = 10, r_eff = r_eff3)
+fit_loo &lt;- loo(fit, cores = 8)
 
-# generate loo quantile predictions via PSIS
-loo_pred1 &lt;- loo::E_loo(ppred1,psis_object = psis1, log_ratios = log_ratios1, type = &quot;quantile&quot;, 
-                        probs = c(0.05,0.25,0.5,0.75,0.95))
-loo_pred2 &lt;- loo::E_loo(ppred2,psis_object = psis2, log_ratios = log_ratios2, type = &quot;quantile&quot;, 
-                        probs = c(0.05,0.25,0.5,0.75,0.95))
-loo_pred3 &lt;- loo::E_loo(ppred3,psis_object = psis3, log_ratios = log_ratios3, type = &quot;quantile&quot;, 
-                        probs = c(0.05,0.25,0.5,0.75,0.95))
+# loo predict
+loo_pred.LMA &lt;- loo_predict(fit, type = &quot;quantile&quot;,
+                             probs = c(0.025,0.25,0.5,0.75,0.975), resp = &quot;LMA&quot;) %&gt;%
+                             t %&gt;% `colnames&lt;-`(c(&quot;ll&quot;,&quot;l&quot;,&quot;m&quot;,&quot;h&quot;,&quot;hh&quot;))
+loo_pred.N_mass &lt;- loo_predict(fit, type = &quot;quantile&quot;,
+                             probs = c(0.025,0.25,0.5,0.75,0.975), resp = &quot;Nmass&quot;) %&gt;%
+                             t %&gt;% `colnames&lt;-`(c(&quot;ll&quot;,&quot;l&quot;,&quot;m&quot;,&quot;h&quot;,&quot;hh&quot;))
+loo_pred.d13C &lt;- loo_predict(fit, type = &quot;quantile&quot;,
+                             probs = c(0.025,0.25,0.5,0.75,0.975), resp = &quot;d13C&quot;) %&gt;%
+                             t %&gt;% `colnames&lt;-`(c(&quot;ll&quot;,&quot;l&quot;,&quot;m&quot;,&quot;h&quot;,&quot;hh&quot;))
 
-# collate loo estimates
-loo_pred_probs1 &lt;- loo_pred1$value %&gt;% t %&gt;% as.data.frame() %&gt;% as_tibble()
-loo_pred_probs2 &lt;- loo_pred2$value %&gt;% t %&gt;% as.data.frame() %&gt;% as_tibble()
-loo_pred_probs3 &lt;- loo_pred3$value %&gt;% t %&gt;% as.data.frame() %&gt;% as_tibble()
-colnames(loo_pred_probs1) &lt;- colnames(loo_pred_probs2) &lt;- colnames(loo_pred_probs3) &lt;- c(&quot;ll&quot;,&quot;l&quot;,&quot;m&quot;,&quot;h&quot;,&quot;hh&quot;)
+# plot
+loo.plot.LMA &lt;-
+  loo_pred.LMA %&gt;%
+  as_tibble %&gt;%
+  mutate(y_obs = fit$data$LMA) %&gt;%
+  arrange(m) %&gt;%
+  mutate(n = 1:n()) %&gt;%
+  ggplot(aes(n)) +
+  geom_linerange(aes(ymin = ll, ymax = hh), alpha = 0.4) +
+  geom_linerange(aes(ymin = l, ymax = h), size = 1, alpha = 0.4)+
+  geom_line(aes(y = m), size = 0.5) +
+  geom_point(aes(y = y_obs), col = blues9[9], size =1.5) +
+  labs(y = NULL, x = NULL,
+       title = &quot;LOO-predictive intervals: LMA&quot;)
 
-# compute coverage
-cov1 &lt;- loo_pred_probs1 %&gt;% mutate(x = 1:n(), k = loo_pred1$pareto_k, y_obs = fit$data$N_mass) %&gt;% 
-  get_coverage() * 100/length(fit$data$animal); cov1 &lt;- round(cov1)
-cov2 &lt;- loo_pred_probs2 %&gt;% mutate(x = 1:n(), k = loo_pred2$pareto_k, y_obs = fit$data$d13C) %&gt;% 
-  get_coverage() * 100/length(fit$data$animal); cov2 &lt;- round(cov2)
-cov3 &lt;- loo_pred_probs3 %&gt;% mutate(x = 1:n(), k = loo_pred3$pareto_k, y_obs = fit$data$LMA) %&gt;% 
-  get_coverage() * 100/length(fit$data$animal); cov3 &lt;- round(cov3)
+loo.plot.Nmass &lt;-
+  loo_pred.Nmass %&gt;%
+  as_tibble %&gt;%
+  mutate(y_obs = fit$data$N_mass) %&gt;%
+  arrange(m) %&gt;%
+  mutate(n = 1:n()) %&gt;%
+  ggplot(aes(n)) +
+  geom_linerange(aes(ymin = ll, ymax = hh), alpha = 0.4) +
+  geom_linerange(aes(ymin = l, ymax = h), size = 1, alpha = 0.4)+
+  geom_line(aes(y = m), size = 0.5) +
+  geom_point(aes(y = y_obs), col = blues9[9], size =1.5) +
+  labs(y = NULL, x = NULL, title = &quot;LOO-predictive intervals: Nmass&quot;)
 
+loo.plot.d13C &lt;-
+  loo_pred.d13C %&gt;%
+  as_tibble %&gt;%
+  mutate(y_obs = fit$data$d13C) %&gt;%
+  arrange(m) %&gt;%
+  mutate(n = 1:n()) %&gt;%
+  ggplot(aes(n)) +
+  geom_linerange(aes(ymin = ll, ymax = hh), alpha = 0.4) +
+  geom_linerange(aes(ymin = l, ymax = h), size = 1, alpha = 0.4)+
+  geom_line(aes(y = m), size = 0.5) +
+  geom_point(aes(y = y_obs), col = blues9[9], size =1.5) +
+  labs(y = NULL, x = NULL, title = &quot;LOO-predictive intervals: d13C&quot;)
 
-# main plot
-ggarrange(plot_pred(loo_pred_probs1, fit$data$N_mass, cov1, &quot;N_mass&quot;, arrange = TRUE),
-          plot_pred(loo_pred_probs2, fit$data$d13C, cov2, &quot;d13C&quot;, arrange = TRUE),
-          plot_pred(loo_pred_probs3, fit$data$LMA, cov3, &quot;LMA&quot;, arrange = TRUE),
-          ncol = 1)
-
-
-#------------------
-# residual analysis
-#------------------
-pe1 &lt;- predictive_error(fit, resp = &quot;Nmass&quot;) %&gt;% as.data.frame() %&gt;% map_dbl(mean)
-pe2 &lt;- predictive_error(fit, resp = &quot;d13C&quot;) %&gt;% as.data.frame() %&gt;% map_dbl(mean)
-pe3 &lt;- predictive_error(fit, resp = &quot;LMA&quot;) %&gt;% as.data.frame() %&gt;% map_dbl(mean)
-
-tibble(r1 = pe1, r2 = pe2, r3 = pe3) %&gt;% 
-  ggplot() + 
-  stat_qq(aes(sample = r1, col = &quot;N_mass&quot;)) +
-  stat_qq(aes(sample = r2, col = &quot;d13C&quot;)) +
-  stat_qq(aes(sample = r3, col = &quot;LMA&quot;)) +
-  scale_colour_manual(values = c(blues9[4], blues9[6], blues9[8])) +
-  labs(col = &quot;Response&quot;, subtitle = &quot;QQ plots&quot;) +
-  theme_classic()</code></pre>
+ggarrange(loo.plot.y1,loo.plot.y2, ncol =1)</code></pre>
 <p><br />
 </p>
 </div>
 </div>
-<div id="notes" class="section level1">
-<h1>Notes</h1>
-<p>By using the consensus tree from <span class="citation">(Thornhill et
-al. 2019)</span> to compute <span class="math inline">\(C\)</span>, we
-assume this phylogeny is known without error. In reality, phylogenies
-are inferred from sequence data with uncertainty, and thus represent
-mere hypotheses of the evolutionary relationships between taxa.
-Where-ever possible, it is preferable to propagate this uncertainty into
-our models. In a fully Bayesian setting, integrating over phylogenetic
-uncertainty is achieved by fitting models to a posterior sample of
-trees, e.g. with a function such as <code>brms_multiple</code>. When
-sequence data are available, an even more integrative approach is to
-infer phylogenies jointly with the estimation of trait correlations in
-the likelihood function (e.g. <span class="citation">(Cybis et al.
-2015)</span>). We did not have access to a full posterior distribution
-of trees, though <span class="citation">(Thornhill et al. 2019)</span>
-do present three alternative consensus trees; two inferred by ML and a
-third representing a consensus tree from a Bayesian analysis. Therefore,
-as an informal approach to test how sensitive results were to
-phylogenetic uncertainty, we fit the model to each tree separately and
-confirmed that each fit produced qualitatively equivalent parameter
-estimates (results not shown).</p>
-<p>For discussion of the results of this analysis, see the manuscript at
-<a href="https://doi.org/10.1101/2022.12.13.520338" class="uri">https://doi.org/10.1101/2022.12.13.520338</a>.</p>
+<div id="model-extensions" class="section level1">
+<h1>Model Extensions</h1>
+<div id="distributional-models" class="section level3">
+<h3>Distributional Models</h3>
+<p><code>brms</code> allows for distributional models, where formulae
+are defined for each parameter of the response distribution, rather than
+just the mean. For a Gaussian variable, this means defining a model for
+both the mean and (residual) variance. In this example, we fit a
+single-response distributional PMM of LMA, where correlations between
+random effects for the mean and variance are estimated.</p>
+<pre class="r"><code>## SPECIES LEVEL
+
+# define model formula
+bf.dist &lt;- bf(LMA    ~ 1 + (1|a|gr(phylo, cov = C)) + (1|taxon) + (1|b|dataset_id)) +
+           lf(sigma  ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|dataset_id))
+
+# define phylogenetic correlation matrix
+C &lt;- vcv.phylo(phy, corr = T)
+
+fit_ml_dist_brms &lt;- brm(bf.dist,
+           data   = dat_ml %&gt;% mutate(phylo = taxon) %&gt;% filter(taxon %in% phy$tip.label),
+           family = gaussian(), 
+           data2  = list(C = C),
+           control = list(adapt_delta = 0.95, max_treedepth = 14),
+           cores  = 4, 
+           chains = 4
+)
+# saveRDS(fit_ml_dist_brms, &quot;fit_ml_dist_brms.rds&quot;)
+
+
+#----------------------------------------------------------------------#
+
+## SERIES LEVEL
+
+# phylo vcv
+C &lt;- vcv.phylo(tree_samp[[1]], corr = T)
+
+# fit
+fit_ml_series_dist_brms &lt;- brm(bf.dist,
+           data   = dat_ml %&gt;% mutate(phylo = series) %&gt;% filter(series %in% tree_samp[[1]]$tip.label),
+           family = gaussian(), 
+           data2  = list(C = C),
+           control = list(adapt_delta = 0.95, max_treedepth = 14),
+           cores  = 4, 
+           chains = 4
+)
+fit_ml_series_dist_brms
+# saveRDS(fit_ml_series_dist_brms, &quot;fit_ml_series_dist_brms.rds&quot;)</code></pre>
+<p>The model summary reports negative correlations between random
+effects for the mean and variance of LMA on both the between-study and
+phylogenetic variance components, indicating that species with higher
+mean LMA tend to show lower variability in LMA.</p>
+<!-- # Notes -->
+<!-- By using the consensus tree from [@thornhill2019dated] to compute $C$, we assume this phylogeny is known without error. In reality, phylogenies are inferred from sequence data with uncertainty, and thus represent mere hypotheses of the evolutionary relationships between taxa. Where-ever possible, it is preferable to propagate this uncertainty into our models. In a fully Bayesian setting, integrating over phylogenetic uncertainty is achieved by fitting models to a posterior sample of trees, e.g. with a function such as `brms_multiple`. When sequence data are available, an even more integrative approach is to infer phylogenies jointly with the estimation of trait correlations in the likelihood function (e.g. [@cybis2015assessing]). We did not have access to a full posterior distribution of trees, though [@thornhill2019dated] do present three alternative consensus trees; two inferred by ML and a third representing a consensus tree from a Bayesian analysis. Therefore, as an informal approach to test how sensitive results were to phylogenetic uncertainty, we fit the model to each tree separately and confirmed that each fit produced qualitatively equivalent parameter estimates (results not shown). -->
+<!-- For discussion of the results of this analysis, see the manuscript at https://doi.org/10.1101/2022.12.13.520338. -->
 <p><br />
 <br />
 </p>
 </div>
+</div>
 <div id="references" class="section level1 unnumbered">
 <h1 class="unnumbered">References</h1>
-<div id="refs" class="references csl-bib-body hanging-indent" entry-spacing="0">
+<div id="refs" class="references csl-bib-body hanging-indent">
 <div id="ref-burkner2021" class="csl-entry">
 Bürkner, Paul-Christian, Jonah Gabry, and Aki Vehtari. 2021.
 <span>“<span class="nocase">Efficient leave-one-out cross-validation for
 Bayesian non-factorized normal and Student-t models</span>.”</span>
 <em>Computational Statistics</em> 36 (2): 1243–61. <a href="https://doi.org/10.1007/s00180-020-01045-4">https://doi.org/10.1007/s00180-020-01045-4</a>.
-</div>
-<div id="ref-cybis2015assessing" class="csl-entry">
-Cybis, Gabriela B, Janet S Sinsheimer, Trevor Bedford, Alison E Mather,
-Philippe Lemey, and Marc A Suchard. 2015. <span>“Assessing Phenotypic
-Correlation Through the Multivariate Phylogenetic Latent Liability
-Model.”</span> <em>The Annals of Applied Statistics</em> 9 (2): 969.
 </div>
 <div id="ref-falster2021austraits" class="csl-entry">
 Falster, Daniel, Rachael Gallagher, Elizabeth H Wenk, Ian J Wright, Dony
