@@ -107,7 +107,7 @@ source("MR-PMM_tutorial_functions.R")
 
 ## Model Explanation
 
-For the case of a single Gaussian trait, our response variable $\mathbf{y}$, a vector of length $N_\mathrm{obs}$, is modeled as a linear combination of fixed $\mathbf{b}$ and random $\mathbf{u}$ effect predictions, and residual errors $\mathbf{e}$
+For the case of a single Gaussian trait, our response variable $\mathbf{y}$, a vector of length $N_\mathrm{obs}$, is modeled as a linear combination of fixed $\mathbf{b}$ and random $\mathbf{u}$ effects, and residual errors $\mathbf{e}$
 
 \
 
@@ -117,14 +117,14 @@ For the case of a single Gaussian trait, our response variable $\mathbf{y}$, a v
 
 \
 
-where $\mathbf{X}$ and $\mathbf{Z}$ are design matrices relating fixed and random predictors to the data.
+where $\mathbf{X}$ and $\mathbf{Z}$ are design matrices for the fixed and random effects, respectively.
 
-We begin with a simple example, in which $\mathbf{b}$ contains a single term estimating the intercept of $\mathbf{y}$, and $\mathbf{u}$ contains a single phylogenetic random effect. In order to capture the expected influence of phylogenetic history on $\mathbf{y}$, (similar values among closely related taxa), our phylogenetic random effect $\mathbf{u}$ is multivariate normal with mean 0 and (co)variance $\sigma^2_\mathrm{phy}\mathbf{C}$,
+We begin with a simple example, in which $\mathbf{b}$ is length 1 and estimates a common intercept for $\mathbf{y}$, and $\mathbf{u}$ is a vector of phylogenetic intercepts equal in length to the number of taxa. In order to capture the expected influence of phylogenetic history on $\mathbf{y}$, (similar values among closely related taxa), our phylogenetic random effect $\mathbf{u}$ is distributed as multivariate normal with mean 0 and (co)variance $\sigma^2_\mathrm{phy}\mathbf{C}$,
 
 \
 
 \begin{eqnarray}
-\mathbf{u} &\sim& \mbox{MVN}(0, \sigma^2_\mathrm{phy}\mathbf{C}),
+\mathbf{u} &\sim& \mathcal{N}(0, \sigma^2_\mathrm{phy}\mathbf{C}),
 \end{eqnarray}\
 
 
@@ -134,10 +134,10 @@ where $\mathbf{C}$ is a fixed $N_\mathrm{taxa} \times N_\mathrm{taxa}$ phylogene
 
 \begin{eqnarray}
 \mathbf{C} &=& 
-\begin{pmatrix}\mathbf{C}_{11} & \mathbf{C}_{12} & \ldots & \mathbf{C}_{1N_\mathrm{taxa}} \\ 
-                \mathbf{C}_{21} & \mathbf{C}_{22} & \ldots & \mathbf{C}_{2N_\mathrm{taxa}} \\
+\begin{pmatrix}\mathrm{C}_{11} & \mathrm{C}_{12} & \ldots & \mathrm{C}_{1N_\mathrm{taxa}} \\ 
+                \mathrm{C}_{21} & \mathrm{C}_{22} & \ldots & \mathrm{C}_{2N_\mathrm{taxa}} \\
                 \vdots & \vdots & \ddots & \vdots \\ 
-                \mathbf{C}_{N_\mathrm{taxa}1} & \mathbf{C}_{N_\mathrm{taxa}2} & \ldots & \mathbf{C}_{N_\mathrm{taxa}N_\mathrm{taxa}} \\ 
+                \mathrm{C}_{N_\mathrm{taxa}1} & \mathrm{C}_{N_\mathrm{taxa}2} & \ldots & \mathrm{C}_{N_\mathrm{taxa}N_\mathrm{taxa}} \\ 
 \end{pmatrix}
 \end{eqnarray}\
 
@@ -146,19 +146,17 @@ In contrast, the identity matrix $\mathbf{I}$ (an $N_{obs} \times N_{obs}$ matri
 \
 
 \begin{eqnarray}
-\mathbf{e} \sim \mbox{MVN}(0, \sigma^2_\mathrm{res}\mathbf{I})\\
+\mathbf{e} \sim \mathcal{N}(0, \sigma^2_\mathrm{res}\mathbf{I})\\
 \end{eqnarray}\
 
 \begin{eqnarray}
 \mathbf{I} &=& 
-\begin{pmatrix}\mathbf{I}_{11} & \mathbf{I}_{12} & \ldots & \mathbf{I}_{1N_\mathrm{obs}} \\ 
-                \mathbf{I}_{21} & \mathbf{I}_{22} & \ldots & \mathbf{I}_{2N_\mathrm{obs}} \\
+\begin{pmatrix}\mathrm{I}_{11} & \mathrm{I}_{12} & \ldots & \mathrm{I}_{1N_\mathrm{obs}} \\ 
+                \mathrm{I}_{21} & \mathrm{I}_{22} & \ldots & \mathrm{I}_{2N_\mathrm{obs}} \\
                 \vdots & \vdots & \ddots & \vdots \\ 
-                \mathbf{I}_{N_\mathrm{obs}1} & \mathbf{I}_{N_\mathrm{obs}2} & \ldots & \mathbf{I}_{N_\mathrm{obs}N_\mathrm{obs}} \\ 
+                \mathrm{I}_{N_\mathrm{obs}1} & \mathrm{I}_{N_\mathrm{obs}2} & \ldots & \mathrm{I}_{N_\mathrm{obs}N_\mathrm{obs}} \\ 
 \end{pmatrix}
 \end{eqnarray}\
-
-
 
 
 \
@@ -183,11 +181,11 @@ For this phylogeny, the similarity matrix (elements expressing the sum of shared
 
 \begin{eqnarray}
 \mathbf{C} &=& 
-\begin{pmatrix}\mathbf{C}_{11} & \mathbf{C}_{12} & \mathbf{C}_{13} & \mathbf{C}_{14} & \mathbf{C}_{15} \\ 
-                \mathbf{C}_{21} & \mathbf{C}_{22} & \mathbf{C}_{23} & \mathbf{C}_{24} & \mathbf{C}_{25} \\
-                \mathbf{C}_{31} & \mathbf{C}_{32} & \mathbf{C}_{33} & \mathbf{C}_{34} & \mathbf{C}_{35} \\
-                \mathbf{C}_{41} & \mathbf{C}_{42} & \mathbf{C}_{43} & \mathbf{C}_{44} & \mathbf{C}_{45} \\
-                \mathbf{C}_{51} & \mathbf{C}_{52} & \mathbf{C}_{53} & \mathbf{C}_{54} & \mathbf{C}_{55} \\
+\begin{pmatrix}\mathrm{C}_{11} & \mathrm{C}_{12} & \mathrm{C}_{13} & \mathrm{C}_{14} & \mathrm{C}_{15} \\ 
+                \mathrm{C}_{21} & \mathrm{C}_{22} & \mathrm{C}_{23} & \mathrm{C}_{24} & \mathrm{C}_{25} \\
+                \mathrm{C}_{31} & \mathrm{C}_{32} & \mathrm{C}_{33} & \mathrm{C}_{34} & \mathrm{C}_{35} \\
+                \mathrm{C}_{41} & \mathrm{C}_{42} & \mathrm{C}_{43} & \mathrm{C}_{44} & \mathrm{C}_{45} \\
+                \mathrm{C}_{51} & \mathrm{C}_{52} & \mathrm{C}_{53} & \mathrm{C}_{54} & \mathrm{C}_{55} \\
                 \end{pmatrix}
 &=&                
 \begin{pmatrix} 4 & 3 & 0 & 0 & 0 \\ 
@@ -348,7 +346,7 @@ In MCMCglmm, `animal` is a reserved term used to identify individuals/taxa in a 
 
 In brms, the phylogenetic random effect can be encoded in the style of lme4 `(1|gr(animal, cov = C))`, where `(1|x)` specifies random intercepts and `gr(animal, cov = C)` encodes the phylogenetic group structure. 
 
-A key difference between these packages is the Monte Carlo sampling method implemented and the subsequent choice of priors. MCMCglmm is based on Gibbs sampling, which utilises conjugate prior distributions to reduce sampling time through analytic computations. However, the default priors for variances are improper, meaning priors are usually specified for variances in practice.
+A key difference between these packages is the Monte Carlo sampling method implemented and the subsequent choice of priors. MCMCglmm is based on Gibbs sampling, which utilises conjugate prior distributions to reduce sampling time through analytic computations.
 brms uses Hamiltonian Monte Carlo sampling which is an efficient hybrid of optimisation and sampling approaches that places no restrictions on the choice of prior. It is not necessary (or even recommended) to specify a prior to fit this model in brms because sensible defaults are used automatically.
 
 \
@@ -365,7 +363,7 @@ plot(b.1)
 
 ```
 
-Another standard indicator of sampling adequacy is the effective sample size (ESS) of each parameter estimate. In the presence of auto-correlation between MCMC samples, the ESS will be reduced relative to the thinned sample number, with low ESS indicating poor sampling. ESS is reported in the model summary for both `MCMCglmm` and `brms`.
+Another standard indicator of sampling adequacy is the effective sample size (ESS) of each parameter estimate. In the presence of auto-correlation between MCMC samples, the ESS will be reduced relative to the thinned sample number, with low ESS indicating poor sampling. ESS is reported in the model summary for both `MCMCglmm` and `brms`, with a bulk ESS >400 recommended for a positive assessment of convergence [@vehtari2021rank].
 
 ```{r, eval = F}
 
@@ -375,7 +373,7 @@ b.1
 
 ```
 
-As `brms` fits multiple MCMC chains by default, potential scale reduction factors, $\widehat{R}$, are reported in the model summary for a quantitative assessment of convergence for each parameter. As a rule of thumb, $\widehat{R}$ $\\<$ 1.05 indicate adequate convergence [@gelman2013BDA]. For `MCMCglmm`, $\widehat{R}$ can be calculated from multiple MCMC chains of the same model using the `Rhat` function from rstan.
+As `brms` fits multiple MCMC chains by default, potential scale reduction factors, $\widehat{R}$, are reported in the model summary for a quantitative assessment of convergence for each parameter. As a rule of thumb, $\widehat{R}$ $\\<$ 1.05 indicates adequate convergence [@gelman2013BDA], though more stringent criteria ($\widehat{R}$ $\\<$ 1.01 across 4 MCMC chains) have recently been advocated [@vehtari2021rank]. For `MCMCglmm`, $\widehat{R}$ can be calculated from multiple MCMC chains of the same model using the `Rhat` function from rstan.
 
 ```{r, eval = F}
 
@@ -459,7 +457,7 @@ An even more rigorous approach to model validation of MR-PMM is leave-one-out (L
 
 ## Inference
 
-Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based upon summary statistics of the posterior distributions of the model parameters. For example, hypothesis tests can be performed by evaluating whether a credible interval (e.g. 95%) of the posterior of a parameter crosses zero. This is easily evaluated from the model summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify variances, we will re-scale estimates from brms by calculating quantiles from the square of MCMC samples.
+Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based on the estimated posterior distribution of the model parameters. For example, one-sided hypothesis tests can easily be performed by computing the proportion of samples satisfying a specified condition, e.g., $\theta < 0$. Inference can also be made by directly interpreting summary statistics of the marginal posterior distribution (e.g., the median and the 50% and 95% credible intervals). This is easily evaluated from the model summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify variances, we will transform estimates from brms by calculating quantiles from the square of MCMC samples.
 
 ```{r, eval = F}
 # summary
@@ -488,11 +486,13 @@ b.1 %>% as_tibble() %>%
 
 ### Phylogenetic Signal
 
-An estimate of phylogenetic signal $\lambda$ (the proportion of variation in a trait attributed to phylogenetic effects) in $\mathbf{y}$ can be calculated as
+For our simple example, an estimate of phylogenetic signal $\lambda$ (the proportion of variation in a trait attributed to phylogenetic effects) in $\mathbf{y}$ can be calculated as
 
 \begin{eqnarray} \label{eq_lambda}
 \lambda = \sigma^2_\mathrm{phy}/(\sigma^2_\mathrm{phy}+\sigma^2_\mathrm{res})
 \end{eqnarray}\
+
+Since we have joint posterior samples for all model parameters, we can derive summaries of the posterior distribution of $\lambda$ as follows:
 
 ```{r, eval = F}
 
@@ -527,7 +527,7 @@ summary(mod)$param["lambda"]
 
 ## Model Explanation
 
-For multi-response (MR) models, species traits are modeled jointly, allowing trait (co)variances to be partitioned across different levels in the model hierarchy. An MR-PMM with two Gaussian response variables takes the form,
+For multi-response (MR) models, species traits are modeled jointly as responses, allowing trait (co)variances to be partitioned across different levels in the model hierarchy. An MR-PMM with two Gaussian response variables $\mathbf{y}_1$ and $\mathbf{y}_2$ takes the form,
 
 ```{=tex}
 \begin{eqnarray} \label{eq_MR_PMM_2}
@@ -540,13 +540,13 @@ For multi-response (MR) models, species traits are modeled jointly, allowing tra
 \end{eqnarray}
 ```
 \
-With this design, the phylogenetic random effects and residuals are also drawn jointly from multivariate normal distributions, with variance given by the Kronecker product of a trait-level correlation matrix and group-level variance structures $\mathbf{C}$ and $\mathbf{I}$, respectively
+With this design, the phylogenetic random effects and residuals are drawn jointly from multivariate normal distributions, with variance given by the Kronecker product of a trait-level correlation matrix and group-level variance structures $\mathbf{C}$ and $\mathbf{I}$, respectively
 
 <!-- as multivariate normals, with variance given by the Kronecker product of a trait-level covariance matrix $\Sigma^{\mathrm{b}}$ and the fixed phylogenetic covariance matrix, $\mathbf{C}$. With $m$ traits (response variables), $\Sigma^{\mathrm{b}}$ is m x m and specifies the phylogenetic variance in each trait (diagonals) as well as the phylogenetic covariance between traits (off-diagonals). With $n$ taxa in the phylogeny, $\Sigma^{\mathrm{b}} \otimes C$ is an $mn\times mn$ cross-covariance matrix containing phylogenetic (co)variances for all traits as well as between all traits. Thus, the phylogenetic random effects and independent residuals are drawn -->
 \
 \begin{eqnarray}
-\mathbf{u} = (\mathbf{u}_1, \mathbf{u}_2)^\mathrm{T} &\sim& \mathrm{N}(0, \Sigma^{\mathrm{phy}} \otimes \mathbf{C}) \\ \nonumber
-\mathbf{e} = (\mathbf{e}_1, \mathbf{e}_2)^\mathrm{T} &\sim& \mathrm{N}(0, \Sigma^{\mathrm{res}} \otimes \mathbf{I}_{N_{\mathrm{obs}}})
+\mathbf{u} = (\mathbf{u}_1, \mathbf{u}_2)^\mathrm{T} &\sim& \mathrm{N}(0, \boldsymbol{\Sigma}^{\mathrm{phy}} \otimes \mathbf{C}) \\ \nonumber
+\mathbf{e} = (\mathbf{e}_1, \mathbf{e}_2)^\mathrm{T} &\sim& \mathrm{N}(0, \boldsymbol{\Sigma}^{\mathrm{res}} \otimes \mathbf{I}_{N_{\mathrm{obs}}})
 \end{eqnarray}
 \
 <!-- \\ -->
@@ -559,7 +559,7 @@ For example, the phylogenetic trait-level correlation matrix $\Sigma^{\mathrm{ph
 \
 
 \begin{eqnarray}
-\Sigma^{\mathrm{phy}}
+\boldsymbol{\Sigma}^{\mathrm{phy}}
 = 
 \begin{pmatrix}\Sigma^{\mathrm{phy}}_{11} & \Sigma^{\mathrm{phy}}_{12} & \ldots & \Sigma^{\mathrm{phy}}_{1m} \\ 
                 \Sigma^{\mathrm{phy}}_{21} & \Sigma^{\mathrm{phy}}_{22} & \ldots & \Sigma^{\mathrm{phy}}_{2m} \\
@@ -595,13 +595,13 @@ such that elements of $\Sigma^{\mathrm{phy}}$ have the general form,
 
 where $\rho^{\mathrm{{phy}}}_{ij}$ is the phylogenetic correlation between traits $i$ and $j$ and $\sigma^{\mathrm{{phy}}}_i$ is the standard deviation of the phylogenetic component of variation in trait $i$. 
 
-Returning to our 5-taxon example, a MR model with two Gaussian response traits (i.e., $m = 2$) will have covariance matrix for the phylogenetic random effects, $\Sigma^{\mathrm{phy}} \otimes \mathbf{C}$, of the form:
+Returning to our 5-taxon example, a MR model with two Gaussian response traits (i.e., $m = 2$) will have covariance matrix for the phylogenetic random effects, $\boldsymbol{\Sigma}^{\mathrm{phy}} \otimes \mathbf{C}$, of the form:
 
 \
 
 \begin{eqnarray}
 
-\Sigma^{\mathrm{phy}} \otimes \mathbf{C}
+\boldsymbol{\Sigma}^{\mathrm{phy}} \otimes \mathbf{C}
 &=& 
 \begin{pmatrix} \Sigma^{\mathrm{phy}}_{11}\mathbf{C} & \Sigma^{\mathrm{phy}}_{12}\mathbf{C}  \\ 
                 \Sigma^{\mathrm{phy}}_{21}\mathbf{C} & \Sigma^{\mathrm{phy}}_{22}\mathbf{C}  \\
@@ -645,14 +645,14 @@ Returning to our 5-taxon example, a MR model with two Gaussian response traits (
 
 \
 
-Similarly, the covariance matrix for the independent residual errors, $\Sigma^{\mathrm{res}} \otimes \mathbf{I}$, is:
+Similarly, the covariance matrix for the independent residual errors, $\boldsymbol{\Sigma}^{\mathrm{res}} \otimes \mathbf{I}$, is:
 
 \
 
 
 \begin{eqnarray}
 
-\Sigma^{\mathrm{res}} \otimes \mathbf{I}
+\boldsymbol{\Sigma}^{\mathrm{res}} \otimes \mathbf{I}
 &=& 
 \begin{pmatrix} \Sigma^{\mathrm{res}}_{11}\mathbf{I} & \Sigma^{\mathrm{res}}_{12}\mathbf{I}  \\ 
                 \Sigma^{\mathrm{res}}_{21}\mathbf{I} & \Sigma^{\mathrm{res}}_{22}\mathbf{I}  \\
@@ -795,9 +795,9 @@ b.2 <- brm(b.2.bf,
 
 ## Model Syntax
 
-In MCMCglmm, we use `cbind()` to specify multiple response variables. The reserved term `trait` is used to specify fixed effects for all response variables. In our example, `trait-1` suppresses the global intercept, instead fitting separate intercepts for each trait $y1$ and $y2$. With multiple response variables, it is now possible to model covariance between responses at different levels in the model hierarchy. MCMCglmm offers several options for defining the structure of covariance matrices to be estimated (@hadfield2010; also see MCMCglmm course notes). The argument `~us(trait)` specifies an unstructured (all elements estimated) covariance matrix with dimension equal to the number of response traits (here 2 x 2). The suffix `:animal` specifies this covariance matrix is on the level of the grouping factor `animal`, where-as `:units` encodes the residual covariance matrix.
+In MCMCglmm, we use `cbind()` to specify multiple response variables. The reserved term `trait` is used to specify fixed effects for all response variables. In our example, `trait-1` suppresses the global intercept, instead fitting separate intercepts for each trait $\mathbf{y}_1$ and $\mathbf{y}_2$. With multiple response variables, it is now possible to model covariance between responses at different levels in the model hierarchy. MCMCglmm offers several options for defining the structure of covariance matrices to be estimated (@hadfield2010; also see MCMCglmm course notes). The argument `~us(trait)` specifies an unstructured (all elements estimated) covariance matrix with dimension equal to the number of response traits (here 2 x 2). The suffix `:animal` specifies this covariance matrix is on the level of the grouping factor `animal`, where-as `:units` encodes the residual covariance matrix.
 
-In brms, we use `mvbind()` to specify multiple response variables. An index (here `|u|`, but any unique identifier is accepted) is used within the random effect specification to instruct brms to estimate the correlation between $y1$ and $y2$ at the animal group level. If omitted, only the correlation between $y1$ and $y2$ on the residual level will be estimated.
+In brms, we use `mvbind()` to specify multiple response variables. An index (here `|u|`, but any unique identifier is accepted) is used within the random effect specification to instruct brms to estimate the correlation between $\mathbf{y}_1$ and $\mathbf{y}_2$ at the animal group level. If omitted, only the correlation between $\mathbf{y}_1$ and $\mathbf{y}_2$ on the residual level will be estimated.
 
 \
 
@@ -811,7 +811,7 @@ For MR cases, the parameters of interest are usually the trait-level correlation
 \rho^{\cdots}_{12} = \frac{\Sigma^{\cdots}_{12}}{\sqrt{(\Sigma^{\cdots}_{11} \times \Sigma^{\cdots}_{22})}}
 \end{eqnarray}\
 
-Thus, posterior distributions of each pairwise correlation estimate are obtained by supplying vectors of posterior samples for each (co)variance parameter. These calculations are performed and reported by default in the brms model summary. For MCMCglmm, correlations can be calculated from (co)variance estimates with some basic manipulations:
+where $\cdots$ specifies the relevant variance component, e.g., for our simple example, either $\mathrm{phy}$ or $\mathrm{res}$. Thus, posterior distributions of each pairwise correlation estimate are obtained by supplying vectors of posterior samples for each (co)variance parameter. These calculations are performed and reported by default in the brms model summary. For MCMCglmm, correlations can be calculated from (co)variance estimates with some basic manipulations:
 
 ```{r eval=FALSE}
 
@@ -834,7 +834,7 @@ quantile(m.2$VCV[,"traity1:traity2.units"]/
 
 ### Phylogenetic Signal
 
-Phylogenetic signal is calculated for each trait by substituting elements of the parameterized (co)variance matrices $\Sigma^{\mathrm{phy}}$ and $\Sigma^{\mathrm{res}}$ into the calculation of $\lambda$, e.g., for $y1$:
+Phylogenetic signal is calculated for each trait by substituting elements of the parameterized (co)variance matrices $\boldsymbol{\Sigma}^{\mathrm{phy}}$ and $\boldsymbol{\Sigma}^{\mathrm{res}}$ into the calculation of $\lambda$, e.g., for $\mathbf{y}_1$:
 
 ```{r, eval = F}
 
@@ -854,14 +854,27 @@ b.2 %>% as_tibble() %>%
 
 ### Partial Correlations
 
-The fitted covariance matrices $\Sigma^{\mathrm{phy}}$ and $\Sigma^{\mathrm{res}}$ may be used to compute conditional dependencies (i.e., partial correlations) between traits on both the phylogenetic and residual level. Partial correlations describe the pairwise relationship between response variables conditional on all other response variables in the model (analogous to the partial regression coefficients estimated in multiple regression). Partial correlations are derived by computing the matrix inverse (known as the precision matrix for covariance matrices) of the relevant trait-level covariance matrix, e.g., $\Sigma^{\mathrm{phy}}$. For a bivariate model, standard and partial correlation estimates are identical because there are no additional response variables to control for when estimating $\rho^{phy}_{12}$. However, for models with >2 response variables, standard and partial correlation estimates may vary drastically. To demonstrate, we will simulate data under a trivariate MR-PMM in which the correlation between two variables $x$ and $y$ can be explained entirely by independent causal relationships with a third variable $z$ (Figure 1 in the [manuscript](https://doi.org/10.1101/2022.12.13.520338)). For brevity, we will simulate data using a wrapper function `mrpmm_sim()` for the procedure outline above.
+The fitted covariance matrices $\boldsymbol{\Sigma}^{\mathrm{phy}}$ and $\boldsymbol{\Sigma}^{\mathrm{res}}$ may be used to compute conditional dependencies (i.e., partial correlations) between traits on both the phylogenetic and residual level. Partial correlations describe the pairwise relationship between response variables conditional on all other response variables in the model (analogous to the partial regression coefficients estimated in multiple regression), and in MR-PMM are derived from elements of the inverse trait-covariance matrices, called precision matrices $\boldsymbol\Omega = \left(\Omega_{ij}\right)$; that is,
 
+\begin{eqnarray}
+ \boldsymbol\Omega^{\mathrm{phy}} = (\boldsymbol\Sigma^{\mathrm{phy}})^{-1}
+\qquad\quad\mbox{and}\qquad\quad
+\boldsymbol\Omega^{\mathrm{res}} = (\boldsymbol\Sigma^{\mathrm{res}})^{-1},
+\end{eqnarray}
+
+for which the corresponding partial correlation coefficients are ${-\Omega_{ij}}/{\sqrt{\Omega_{ii}\Omega_{jj}}}$.
+
+For a bivariate model, standard and partial correlation estimates are identical because there are no additional response variables to control for when estimating $\rho^{\mathrm{phy}}_{12}$. However, for models with >2 response variables, standard and partial correlation estimates may vary drastically (see Figure 1 from the [manuscript](https://doi.org/10.1101/2022.12.13.520338) below).
 
 ```{r, echo=FALSE, out.width = '80%'}
 
 knitr::include_graphics("partial_cor.png")
 
 ```
+
+\
+
+To demonstrate, we will simulate data under a trivariate MR-PMM in which the correlation between two variables $x$ and $y$ can be explained entirely by independent causal relationships with a third variable $z$. For brevity, we will simulate data using a wrapper function `mrpmm_sim()` for the procedure outline above.
 
 
 ```{r}

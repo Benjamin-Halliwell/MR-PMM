@@ -68,10 +68,9 @@ taxonomy <- read.csv("EUC_TAXONOMY_2024.csv")
 
 # load in model fits
 fit_mean_mcmcglmm <- readRDS(file = "fit_mean_mcmcglmm.rds")
-# fit_mean_brms <- readRDS(file = "fit_mean_brms.rds")
+fit_mean_brms <- readRDS(file = "fit_mean_brms.rds")
 fit_mean_series_brms <- readRDS(file = "fit_mean_series_brms.rds")
 fit_ml_mcmcglmm <- readRDS(file = "fit_ml_mcmcglmm.rds")
-# fit_ml_series_mcmcglmm <- readRDS(file = "fit_ml_series_mcmcglmm.rds")
 fit_ml_brms <- readRDS(file = "fit_ml_brms.rds")
 fit_ml_series_brms <- readRDS(file = "fit_ml_series_brms.rds")
 fit_ml_lkj_brms <- readRDS(file = "fit_ml_lkj_brms.rds")
@@ -636,8 +635,6 @@ fit_mean_brms <- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
               control = list(adapt_delta = 0.95, max_treedepth = 12),
               cores   = 4, 
               chains  = 4)
-fit_mean_brms
-
 saveRDS(fit_mean_brms, "fit_mean_brms.rds")
 
 ```
