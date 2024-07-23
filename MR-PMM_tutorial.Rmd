@@ -1114,7 +1114,7 @@ b.4 %>% as_tibble() %>%
 
 \
 
-N.B. Even when dealing exclusively with Gaussian traits, adjustments to the calculation of $\lambda$ are sometimes necessary. For example, including additional variance components from multilevel models in the denominator of the $\lambda$ calculation [@de2016general].
+N.B. Even when dealing exclusively with Gaussian traits, adjustments to the calculation of $\lambda$ are sometimes necessary. For example, including additional variance components from multilevel models in the denominator of the $\lambda$ calculation [@de2018fixed].
 
 \
 
