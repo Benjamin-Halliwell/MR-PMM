@@ -151,10 +151,10 @@ In contrast, the identity matrix $\mathbf{I}$ (an $N_{obs} \times N_{obs}$ matri
 
 \begin{eqnarray}
 \mathbf{I} &=& 
-\begin{pmatrix}\mathrm{I}_{11} & \mathrm{I}_{12} & \ldots & \mathrm{I}_{1N_\mathrm{obs}} \\ 
-                \mathrm{I}_{21} & \mathrm{I}_{22} & \ldots & \mathrm{I}_{2N_\mathrm{obs}} \\
+\begin{pmatrix}\mathrm{I}_{11} & 0 & \ldots & 0 \\ 
+                0 & \mathrm{I}_{22} & \ldots & 0 \\
                 \vdots & \vdots & \ddots & \vdots \\ 
-                \mathrm{I}_{N_\mathrm{obs}1} & \mathrm{I}_{N_\mathrm{obs}2} & \ldots & \mathrm{I}_{N_\mathrm{obs}N_\mathrm{obs}} \\ 
+                0 & 0 & \ldots & \mathrm{I}_{N_\mathrm{obs}N_\mathrm{obs}} \\ 
 \end{pmatrix}
 \end{eqnarray}\
 

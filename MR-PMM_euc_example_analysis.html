@@ -2078,13 +2078,16 @@ data, passing in the sampling variances for each observation via the the
 <code>MCMCglmm</code>,</p>
 <pre class="r"><code>## MR-PMM
 
+# number of response variables in model
+n_resp = 3
+
 # phylogenetic correlation matrix (here actually the inverse of the phylo covariance matrix)
 C &lt;- inverseA(phy %&gt;% 
               keep.tip(dat_mean %&gt;% filter(taxon %in% phy$tip.label) %&gt;% pull(taxon)))$Ainv
 
 # uninformative prior
-p_mean &lt;- list(R = list(V=diag(3), nu=3),
-               G = list(G1=list(V=diag(3), nu=3)))
+p_mean &lt;- list(R = list(V=diag(n_resp), nu=n_resp),
+               G = list(G1=list(V=diag(n_resp), nu=n_resp)))
 
 # subset data to tree
 dat_mean_fit &lt;- dat_mean %&gt;% filter(taxon %in% phy$tip.label)
@@ -2122,8 +2125,6 @@ fit_mean_brms &lt;- brm(bf_y1 + bf_y2 + bf_y3 + set_rescor(TRUE),
               control = list(adapt_delta = 0.95, max_treedepth = 12),
               cores   = 4, 
               chains  = 4)
-fit_mean_brms
-
 saveRDS(fit_mean_brms, &quot;fit_mean_brms.rds&quot;)</code></pre>
 <p>Importantly, because the Hamiltonian sampler is unable to take
 advantage of numerical solutions for the multivariate Gaussian case,
@@ -2175,14 +2176,15 @@ variances and measurement error.</p>
 <pre class="r"><code># only keep rows with data for at least one of the leaf traits (filter out rows with data for none)
 dat_ml &lt;- dat %&gt;%
   filter(!(is.na(dat$d13C) &amp; is.na(dat$N_mass) &amp; is.na(dat$LMA))) %&gt;%
-  select(id,dataset_id,taxon,series,d13C,N_mass,LMA,replicates) %&gt;% 
-  mutate(phylo = taxon) # choose which level to model phylo effects</code></pre>
+  select(id,dataset_id,taxon,series,subgenus,d13C,N_mass,LMA,replicates) %&gt;% 
+  mutate(phylo = taxon,
+         subgenus = as.factor(ifelse(subgenus != &quot;Symphyomyrtus&quot;, &quot;Other&quot;, subgenus))) # choose which level to model phylo effects</code></pre>
 <p>Now we can fit our multilevel model.</p>
 <pre class="r"><code># specify prior
-p_ml &lt;- list(R = list(V=diag(3),nu=3),
-             G = list(G1=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3)),
-                      G2=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3)),
-                      G3=list(V=diag(3), nu=3, alpha.mu = rep(0,3), alpha.V = diag(3))))
+p_ml &lt;- list(R = list(V=diag(n_resp),nu=n_resp),
+             G = list(G1=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp)),
+                      G2=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp)),
+                      G3=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp))))
 
 #-----------------------------------------------------------------------------------------#
 
@@ -2279,6 +2281,45 @@ saveRDS(fit_ml_series_brms, &quot;fit_ml_series_brms.rds&quot;)</code></pre>
 <p><br />
 </p>
 </div>
+<div id="covariances-by-a-grouping-factor" class="section level3">
+<h3>Covariances by a grouping factor</h3>
+<p>While complex models of evolution are currently not implemented in
+<code>MCMCglmm</code> or <code>brms</code>, it is possible to fit
+separate trait covariance matrices for different levels of a grouping
+factor (e.g., clade). This may be desirable when there is a strong a
+priori hypothesis that trait correlations should differ between major
+phylogenetic clades, e.g., subgenus Symphyomyrtus vs all other
+Eucalyptus subgenera.</p>
+<pre class="r"><code>p_ml_at.level &lt;- list(R = list(V=diag(n_resp),nu=n_resp),
+                      G = list(G1=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp)),
+                               G2=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp)),
+                               G3=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp)),
+                               G4=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp)),
+                               G5=list(V=diag(n_resp), nu=n_resp, alpha.mu = rep(0,n_resp), alpha.V = diag(n_resp))))
+
+
+fit_ml_mcmcglmm_at.level &lt;- MCMCglmm(cbind(N_mass, d13C, LMA) ~ subgenus:trait-1,
+                     random   = ~us(at.level(subgenus,&#39;Symphyomyrtus&#39;):trait):phylo +
+                                 us(at.level(subgenus,&#39;Other&#39;):trait):phylo + 
+                                 us(at.level(subgenus,&#39;Symphyomyrtus&#39;):trait):taxon +
+                                 us(at.level(subgenus,&#39;Other&#39;):trait):taxon + 
+                                 idh(trait):dataset_id, # between-study
+                     rcov     = ~idh(trait):units, # residual error
+                     ginv     = list(phylo = C),
+                     family   = c(&quot;gaussian&quot;,&quot;gaussian&quot;,&quot;gaussian&quot;),
+                     nitt     = 55000,
+                     burnin   = 5000,
+                     thin     = 50,
+                     data     = as.data.frame(dat_ml %&gt;% 
+                                              filter(phylo %in% dimnames(C)[[1]],
+                                                     !is.na(subgenus))),
+                     prior    = p_ml_at.level,
+                     verbose  = FALSE)
+
+summary(fit_ml_mcmcglmm_at.level)</code></pre>
+<p><br />
+</p>
+</div>
 </div>
 <div id="inference" class="section level1">
 <h1>Inference</h1>
@@ -2324,13 +2365,13 @@ p1 &lt;- mod_res %&gt;%
   as_tibble %&gt;% 
   mutate(.chain = 1, .iteration = 1:nrow(fit_ml$Sol), .draw = 1:nrow(fit_ml$Sol)) %&gt;% 
   pivot_longer(1:6, names_to = &quot;parameter&quot;, values_to = &quot;estimate&quot;) %&gt;%
-  mutate(level = ifelse(str_detect(parameter, &quot;_phy&quot;), &quot;phylogenetic&quot;,&quot;between-species&quot;),
+  mutate(level = ifelse(str_detect(parameter, &quot;_phy&quot;), &quot;phylogenetic&quot;,&quot;non-phylogenetic&quot;),
          parameter = str_replace(parameter, &quot;_phy&quot;, &quot;&quot;),
          parameter = str_replace(parameter, &quot;_ind&quot;, &quot;&quot;)) %&gt;% 
   ggplot(aes(x = estimate, 
              y = factor(parameter, levels=c(&quot;N_mass:LMA&quot;,&quot;d13C:LMA&quot;,&quot;N_mass:d13C&quot;)),
-             col = factor(level, levels = c(&quot;phylogenetic&quot;, &quot;between-species&quot;)), 
-             fill = factor(level, levels = c(&quot;phylogenetic&quot;, &quot;between-species&quot;)))) +
+             col = factor(level, levels = c(&quot;phylogenetic&quot;, &quot;non-phylogenetic&quot;)), 
+             fill = factor(level, levels = c(&quot;phylogenetic&quot;, &quot;non-phylogenetic&quot;)))) +
   stat_halfeye(position = position_dodge(width = 0.4), 
                slab_alpha = 0.5, 
                fatten_point = 3) +
@@ -2347,7 +2388,9 @@ p1 &lt;- mod_res %&gt;%
   scale_y_discrete(labels = c(&quot;N_mass:d13C&quot; = bquote(cor(N[mass]*&quot;,&quot;~delta^13*C)),
                               &quot;N_mass:LMA&quot; = bquote(cor(&quot;LMA&quot;*&quot;,&quot;~N[mass])),
                               &quot;d13C:LMA&quot; = bquote(cor(&quot;LMA&quot;*&quot;,&quot;~delta^13*C))))
-p1  </code></pre>
+p1  
+
+# ggsave(&quot;Figure_4B.tiff&quot;, dpi = 900, width = 30, height = 18, units = c(&quot;cm&quot;))</code></pre>
 <p>The model reports a positive phylogenetic correlation between LMA and
 <span class="math inline">\(\delta\prescript{13}{}{\mathbf{C}}\)</span>,
 and negative phylogenetic correlations between these traits and <span class="math inline">\(\mathbf{N}_{\mathrm{mass}}\)</span>, indicating
@@ -2387,7 +2430,7 @@ d13C_var &lt;- fit_ml$VCV[,&quot;traitd13C:traitd13C.phylo&quot;] +
 # calculate the proportion of variance explained by each level across traits 
 data_stack &lt;- data.frame(
     trait = rep(c(&quot;LMA&quot;,&quot;N_mass&quot;,&quot;d13C&quot;), each=4),
-    level = rep(c(&quot;phylogenetic&quot;,&quot;between-species&quot;,&quot;between-study&quot;,&quot;residual&quot;),3),
+    level = rep(c(&quot;phylogenetic&quot;,&quot;non-phylogenetic&quot;,&quot;study&quot;,&quot;residual&quot;),3),
     post_mode = c(mean(fit_ml$VCV[,&quot;traitLMA:traitLMA.phylo&quot;]/LMA_var),
                   mean(fit_ml$VCV[,&quot;traitLMA:traitLMA.taxon&quot;]/LMA_var),
                   mean(fit_ml$VCV[,&quot;traitLMA.dataset_id&quot;]/LMA_var),
@@ -2406,12 +2449,11 @@ data_stack &lt;- data.frame(
 
 # stacked bar graph
 p2 &lt;- ggplot(data_stack %&gt;% 
-               mutate(post_mode = round(post_mode,2), 
-                      post_mode = ifelse(trait == &quot;N_mass&quot; &amp; level == &quot;phylogenetic&quot;, 0.49,post_mode)), # deal with rounding error
+               mutate(post_mode = round(post_mode,2)),
              aes(x = factor(trait, levels=c(&quot;LMA&quot;,&quot;N_mass&quot;,&quot;d13C&quot;)),
                  y = post_mode, 
                  fill = factor(level, 
-                               levels=rev(c(&quot;phylogenetic&quot;,&quot;between-species&quot;,&quot;between-study&quot;,&quot;residual&quot;))),
+                               levels=rev(c(&quot;phylogenetic&quot;,&quot;non-phylogenetic&quot;,&quot;study&quot;,&quot;residual&quot;))),
                  label = post_mode)) + 
     geom_bar(position=&quot;fill&quot;, stat=&quot;identity&quot;) +
     geom_text(col=&quot;white&quot;, size = 5, position = position_stack(vjust = 0.5)) +
@@ -2423,10 +2465,13 @@ p2 &lt;- ggplot(data_stack %&gt;%
           plot.margin = margin(0.2,1,0.2,0.2, &quot;cm&quot;)) +
     ylab(&quot;proportion of variance&quot;) + xlab(&quot;&quot;) + 
     scale_x_discrete(labels = c(&quot;N_mass&quot; = bquote(N[mass]),
-                              &quot;d13C&quot; = bquote(delta^13*C)))</code></pre>
+                              &quot;d13C&quot; = bquote(delta^13*C)))
+p2
+# ggsave(&quot;Figure_4A.tiff&quot;, dpi = 900, width = 24, height = 18, units = c(&quot;cm&quot;))</code></pre>
 <p>and plot together as a panel.</p>
 <pre class="r"><code># plot together in panel
-ggarrange(p2, p1, widths = c(0.4,0.6), common.legend = T)</code></pre>
+ggarrange(p2, p1, widths = c(0.4,0.6), common.legend = T)
+# ggsave(&quot;Figure_4AB.tiff&quot;, dpi = 900, width = 30, height = 15, units = c(&quot;cm&quot;))</code></pre>
 <p><br />
 </p>
 </div>
@@ -2460,7 +2505,7 @@ correlations as a network.</p>
 
 # choose level to calculate result
 level_cor
-level &lt;- &quot;phy&quot;
+level &lt;- &quot;par_phy&quot;
 
 # calculate
 cor &lt;- paste0(level,&quot;_cor&quot;)
@@ -2480,14 +2525,26 @@ dimnames(cor_mat)[[2]] &lt;- c(&quot;N mass&quot;,&quot;leaf\nd13C&quot;,&quot;L
 diag(cor_mat) &lt;- 0
 g &lt;- igraph::graph_from_adjacency_matrix (cor_mat, weighted=TRUE, mode=&quot;upper&quot;)
 igraph::E(g)$weight &lt;- abs(t(cor_mat[lower.tri(t(cor_mat))]))
-g &lt;- delete.edges(g, igraph::E(g)[sig %&gt;% filter(sig.80 == F) %&gt;% pull(edge)]) # delete no-sig edges
+# g_sig &lt;- delete.edges(g, igraph::E(g)[sig %&gt;% filter(sig.80 == F) %&gt;% pull(edge)]) # delete no-sig edges
+# plot(g_sig,
+#      layout = layout.circle,
+#      vertex.size=32,
+#      edge.width=(abs(igraph::E(g)$weight)^1.5)*30,
+#      edge.color=ifelse((cor_mat &gt; 0)[lower.tri(cor_mat)][sig %&gt;% filter(sig.80 == T) %&gt;% pull(edge)], &quot;blue&quot;,&quot;red&quot;),
+#      edge.lty=sig %&gt;% filter(sig.80 == T) %&gt;% pull(lty))
+
+
 plot(g,
      layout = layout.circle,
      vertex.size=32,
-     edge.width=(abs(igraph::E(g)$weight)^1.25)*10,
-     edge.color=ifelse((cor_mat &gt; 0)[lower.tri(cor_mat)][sig %&gt;% filter(sig.80 == T) %&gt;% pull(edge)], &quot;blue&quot;,&quot;red&quot;),
-     edge.lty=sig %&gt;% filter(sig.80 == T) %&gt;% pull(lty))
+     edge.width=(abs(igraph::E(g)$weight)^2)*20,
+     edge.color=ifelse((cor_mat &gt; 0)[lower.tri(cor_mat)][sig %&gt;% filter(sig.80 == T) %&gt;% pull(edge)], &quot;blue&quot;,&quot;red&quot;))
 
+
+cor_list$posteriors[[&quot;par_phy_cor&quot;]] %&gt;% map(mean)
+cor_list$posteriors[[&quot;par_ind_cor&quot;]] %&gt;% map(quantile)
+cor_list$posteriors[[&quot;par_ind_cor&quot;]] %&gt;% mcmc_areas()
+cor_list$posteriors[[&quot;par_ind_cor&quot;]] %&gt;% mcmc_intervals(prob_outer = 0.95)
 
 #-----------------------------------------------------------------------#</code></pre>
 <p><br />
@@ -2725,66 +2782,6 @@ loo.plot.d13C &lt;-
 
 ggarrange(loo.plot.y1,loo.plot.y2, ncol =1)</code></pre>
 <p><br />
-</p>
-</div>
-</div>
-<div id="model-extensions" class="section level1">
-<h1>Model Extensions</h1>
-<div id="distributional-models" class="section level3">
-<h3>Distributional Models</h3>
-<p><code>brms</code> allows for distributional models, where formulae
-are defined for each parameter of the response distribution, rather than
-just the mean. For a Gaussian variable, this means defining a model for
-both the mean and (residual) variance. In this example, we fit a
-single-response distributional PMM of LMA, where correlations between
-random effects for the mean and variance are estimated.</p>
-<pre class="r"><code>## SPECIES LEVEL
-
-# define model formula
-bf.dist &lt;- bf(LMA    ~ 1 + (1|a|gr(phylo, cov = C)) + (1|taxon) + (1|b|dataset_id)) +
-           lf(sigma  ~ 1 + (1|a|gr(phylo, cov = C)) + (1|b|dataset_id))
-
-# define phylogenetic correlation matrix
-C &lt;- vcv.phylo(phy, corr = T)
-
-fit_ml_dist_brms &lt;- brm(bf.dist,
-           data   = dat_ml %&gt;% mutate(phylo = taxon) %&gt;% filter(taxon %in% phy$tip.label),
-           family = gaussian(), 
-           data2  = list(C = C),
-           control = list(adapt_delta = 0.95, max_treedepth = 14),
-           cores  = 4, 
-           chains = 4
-)
-# saveRDS(fit_ml_dist_brms, &quot;fit_ml_dist_brms.rds&quot;)
-
-
-#----------------------------------------------------------------------#
-
-## SERIES LEVEL
-
-# phylo vcv
-C &lt;- vcv.phylo(tree_samp[[1]], corr = T)
-
-# fit
-fit_ml_series_dist_brms &lt;- brm(bf.dist,
-           data   = dat_ml %&gt;% mutate(phylo = series) %&gt;% filter(series %in% tree_samp[[1]]$tip.label),
-           family = gaussian(), 
-           data2  = list(C = C),
-           control = list(adapt_delta = 0.95, max_treedepth = 14),
-           cores  = 4, 
-           chains = 4
-)
-fit_ml_series_dist_brms
-# saveRDS(fit_ml_series_dist_brms, &quot;fit_ml_series_dist_brms.rds&quot;)</code></pre>
-<p>The model summary reports negative correlations between random
-effects for the mean and variance of LMA on both the between-study and
-phylogenetic variance components, indicating that species with higher
-mean LMA tend to show lower variability in LMA.</p>
-<!-- # Notes -->
-<!-- By using the consensus tree from [@thornhill2019dated] to compute $C$, we assume this phylogeny is known without error. In reality, phylogenies are inferred from sequence data with uncertainty, and thus represent mere hypotheses of the evolutionary relationships between taxa. Where-ever possible, it is preferable to propagate this uncertainty into our models. In a fully Bayesian setting, integrating over phylogenetic uncertainty is achieved by fitting models to a posterior sample of trees, e.g. with a function such as `brms_multiple`. When sequence data are available, an even more integrative approach is to infer phylogenies jointly with the estimation of trait correlations in the likelihood function (e.g. [@cybis2015assessing]). We did not have access to a full posterior distribution of trees, though [@thornhill2019dated] do present three alternative consensus trees; two inferred by ML and a third representing a consensus tree from a Bayesian analysis. Therefore, as an informal approach to test how sensitive results were to phylogenetic uncertainty, we fit the model to each tree separately and confirmed that each fit produced qualitatively equivalent parameter estimates (results not shown). -->
-<!-- For discussion of the results of this analysis, see the manuscript at https://doi.org/10.1101/2022.12.13.520338. -->
-<p><br />
-<br />
 </p>
 </div>
 </div>
