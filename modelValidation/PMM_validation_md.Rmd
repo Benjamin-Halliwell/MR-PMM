@@ -18,7 +18,9 @@ select <- dplyr::select
 
 
 ### Overview
-Here we illustrate various model checking techniques...
+Here we illustrate various model diagnostics and validation techniques for MR-PMM.
+
+$\color{orange}{\text{N.B. This tutorial is a live document that will continue to be improved and updated by the authors. Enjoy!}}$
 
 ### Load fitted model 
 The model has been fit to simulated data comprising two continuous response variables generated from a bi-variate Gaussian distribution with a between-response correlated residual error. The mean includes species-level random effects for each response, which are also correlated both between species (based on a scaled phylogenetic correlation matrix $A$) and between each response.
@@ -45,13 +47,13 @@ mcmc_trace(fit, pars = pars)
 ```
 Next we check the $\widehat{R}$ statistic for each parameter, these should be less than 1.1
 ```{r, warning=FALSE}
-mcmc_rhat(rhat(fit, pars = pars))
+mcmc_rhat(brms::rhat(fit, pars = pars))
 ```
   
 
 We should also check the $\widehat{R}$ values for all 100 of the random effects.
 ```{r, warning=FALSE}
-mcmc_rhat(rhat(fit, pars = r_pars))
+mcmc_rhat(brms::rhat(fit, pars = r_pars))
 ```
   
 
