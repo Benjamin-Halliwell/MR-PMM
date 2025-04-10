@@ -1,6 +1,6 @@
 ---
 title: "Multi-Response Phylogenetic Mixed Models"
-author: "Ben Halliwell & Luke Yates"
+author: "Ben Halliwell & Luke A. Yates"
 header-includes:
   - \usepackage{mathtools}
   - \usepackage{multirow}
@@ -55,7 +55,7 @@ m.4 <- readRDS("m.4.rds");b.4 <- readRDS("b.4.rds")
 
 This tutorial is associated with the article "Multi-Response Phylogenetic Mixed Models: Concepts and Application"
 
-EcoEvoRxiv preprint https://doi.org/10.1101/2022.12.13.520338
+https://onlinelibrary.wiley.com/doi/full/10.1111/brv.70001
 
 by
 
