@@ -759,7 +759,7 @@ d2$obs <- 1:nrow(d2)
 
 ## Priors
 
-The classical parameterisation for the multivariate normal is the covariance form, for which the conjugate prior is the inverse Wishart distribution, characterised by a target matrix (V) and degree of belief parameter (nu). Conjugate priors are an algebraically convenient choice because they provide analytic solutions for certain steps of the model fitting which can greatly reduce estimation time in a Gibbs sampling approach (the covariance form with inverse Wishart prior is implemented in `MCMCglmm`). A shortcoming of specifying priors for the covariance matrix is that the variances and correlations are not treated independently. Indeed, while the inverse Wishart prior with degrees of freedom equal to the number of response traits (or marginally greater) is a weakly informative prior for variance components, its marginal prior for correlations concentrates probability mass away from zero, potentially inflating false positive rates.
+The classical parameterisation for the multivariate normal is the covariance form, for which the conjugate prior is the inverse Wishart distribution, characterised by a target matrix (V) and degree of belief parameter (nu). Conjugate priors are an algebraically convenient choice because they provide analytic solutions for certain steps of the model fitting which can greatly reduce estimation time in a Gibbs sampling approach (the covariance form with inverse Wishart prior is implemented in `MCMCglmm`). A shortcoming of specifying priors for the covariance matrix is that the variances and correlations are not treated independently. Indeed, while the inverse Wishart prior with degrees of freedom equal to the number of response traits $k$ (or marginally greater) is a weakly informative prior for variance components [@de2018quantitative], its marginal prior for correlations concentrates probability mass away from zero, potentially inflating false positive rates.
 
 ```{r, eval=FALSE}
 
@@ -1010,9 +1010,9 @@ we can then fit MR-PMM,
 
 ```{r, eval = F}
 ## FIT MODEL
-p.m.3 <- list(G = list(G1 = list(V = diag(3), nu = 2.002, 
+p.m.3 <- list(G = list(G1 = list(V = diag(3), nu = 4, 
                                  alpha.mu = rep(0,3), alpha.V = diag(3))), # parameter expanded prior
-              R = list(R1 = list(V = diag(3), nu = 2.002)))
+              R = list(R1 = list(V = diag(3), nu = 4)))
 m.3 <- MCMCglmm(cbind(x, y, z) ~ trait-1,
                 random   = ~us(trait):animal,
                 rcov     = ~us(trait):units,
@@ -1146,9 +1146,9 @@ For brms, it is useful to specify separate formulae for each response variable w
 ```{r eval=FALSE}
 
 # MCMCglmm
-p.m.4 <- list(G = list(G1 = list(V = diag(2), nu = 2, 
+p.m.4 <- list(G = list(G1 = list(V = diag(2), nu = 3, 
                                  alpha.mu = rep(0,2), alpha.V = diag(2))), # parameter expanded prior
-           R = list(R1 = list(V = diag(2), nu = 2, fix = 2)))
+           R = list(R1 = list(V = diag(2), nu = 3, fix = 2)))
 m.4 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 random   = ~us(trait):animal,
                 rcov     = ~us(trait):units,
