@@ -5,7 +5,7 @@ header-includes:
   - \usepackage{mathtools}
   - \usepackage{multirow}
   - \usepackage{xcolor}
-date: "2024"
+date: "2025"
 bibliography: bib_MR-PMM.bib
 link-citations: true
 output: 
@@ -34,13 +34,8 @@ library(phytools)
 library(caper)
 library(bayesplot)
 library(ggtree)
-# library(dplyr)
-# library(rstan)
-# library(tidybayes)
-# library(ggplot2)
-# library(ggpubr)
-# library(parallel)
-# library(coda)
+library(gridExtra)
+library(MCMCpack)
 
 source("MR-PMM_tutorial_functions.R")
 
@@ -95,6 +90,8 @@ library(phytools)
 library(caper)
 library(bayesplot)
 library(ggtree)
+library(gridExtra)
+library(MCMCpack)
 
 # tutorial functions file
 source("MR-PMM_tutorial_functions.R")
@@ -760,6 +757,85 @@ d2$obs <- 1:nrow(d2)
 
 \
 
+## Priors
+
+The classical parameterisation for the multivariate normal is the covariance form, for which the conjugate prior is the inverse Wishart distribution, characterised by a target matrix (V) and degree of belief parameter (nu). Conjugate priors are an algebraically convenient choice because they provide analytic solutions for certain steps of the model fitting which can greatly reduce estimation time in a Gibbs sampling approach (the covariance form with inverse Wishart prior is implemented in `MCMCglmm`). A shortcoming of specifying priors for the covariance matrix is that the variances and correlations are not treated independently. Indeed, while the inverse Wishart prior with degrees of freedom equal to the number of response traits (or marginally greater) is a weakly informative prior for variance components, its marginal prior for correlations concentrates probability mass away from zero, potentially inflating false positive rates.
+
+```{r, eval=FALSE}
+
+# set up simulation parameters
+n_samples <- 100000
+k <- 2 # number of response variables
+nu_values <- c(k, k+1, k+2, k+10) # different prior settings for nu
+
+# scale matrix (identity)
+V <- diag(k)
+
+# simulate correlations and variances for different nu values
+correlations <- list()
+vars <- list()
+
+for (nu in nu_values) {
+  samples <- replicate(n_samples, MCMCpack::riwish(nu, V), simplify = FALSE)
+  cor_vals <- sapply(samples, function(m) m[1, 2] / sqrt(m[1, 1] * m[2, 2]))
+  var_vals <- sapply(samples, function(m) m[1, 1])
+  correlations[[as.character(nu)]] <- cor_vals
+  vars[[as.character(nu)]] <- var_vals
+}
+
+# convert to long format for ggplot
+df <- data.frame(
+  nu = rep(nu_values, each = n_samples),
+  correlation = unlist(correlations),
+  var = unlist(vars)
+)
+df$nu <- factor(df$nu, levels = nu_values)
+
+# plot histogram of correlations
+p1 <- ggplot(df, aes(x = correlation, fill = nu, color = nu)) +
+  geom_histogram(alpha = 0.3, bins = 50, position = "identity") +
+  facet_wrap(~nu) +
+  labs(
+    title = paste0("Density of Correlation Coefficients (IW) K = ", k),
+    x = "Correlation",
+    fill = "Degrees of\nFreedom (nu)",
+    color = "Degrees of\nFreedom (nu)"
+  ) +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        strip.text.x = element_blank()) +
+  coord_cartesian(xlim = c(-1, 1))
+p1
+
+# calculate and print summary statistics
+# note that the probability of |correlation| > 0.5 ≅ 0.5 (i.e., is uniform) when nu = k+1
+summary_stats <- df %>%
+  group_by(nu) %>%
+  summarise(
+    Mean = mean(correlation),
+    SD = sd(correlation),
+    Q1 = quantile(correlation, 0.25),
+    Median = median(correlation),
+    Q3 = quantile(correlation, 0.75),
+    P_extreme = mean(abs(correlation) > 0.5)
+  )
+summary_stats
+
+```
+
+
+```{r, echo=FALSE, out.width = '80%'}
+
+knitr::include_graphics("prior_cor.png")
+
+```
+
+As our focus is on estimating correlations, we proceed with a prior for which nu = k+1.
+
+\
+
 ## Model Specification
 
 A MR-PMM with two Gaussian response traits can be specified in MCMCglmm and brms as follows:
@@ -767,8 +843,8 @@ A MR-PMM with two Gaussian response traits can be specified in MCMCglmm and brms
 ```{r eval=FALSE}
 
 ## MCMCglmm 
-p.m.2 <- list(G = list(G1 = list(V = diag(2), nu = 1.002)), 
-              R = list(R1 = list(V = diag(2), nu = 1.002)))
+p.m.2 <- list(G = list(G1 = list(V = diag(2), nu = 3)), 
+              R = list(R1 = list(V = diag(2), nu = 3)))
 m.2 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 random   = ~us(trait):animal,
                 rcov     = ~us(trait):units,
