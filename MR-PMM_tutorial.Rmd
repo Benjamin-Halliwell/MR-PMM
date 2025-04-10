@@ -69,9 +69,11 @@ $\color{orange}{\text{N.B. This tutorial is a live document that will continue t
 
 # Introduction
 
-In this tutorial we will cover how to implement multi-response (MR) phylogenetic mixed models (PMM) in two popular R packages, MCMCglmm and brms. While frequentist implementations of MR-PMM are available (e.g., ASReml), we advocate for a Bayesian approach due to 1) greater flexibility in fitting non-Gaussian response traits 2) suitability for estimating variance components associated with structured random effects; 3) the ability to sample conditional multivariate distributions, avoiding intractable integration problems faced by frequentist techniques.
+In this tutorial we demonstrate how to implement multi-response (MR) phylogenetic mixed models (PMM) in two popular R packages, MCMCglmm and brms. We cover both Gaussian and non-Gaussian models, from data simulation, to model specification, fitting, diagnostics, validation and inference.
 
-Throughout this tutorial we explore a low dimensional example (tree with only 5 taxa) in order to show workings of the matrix operations. This is for the sake of exposition only; analyses of the form presented require much larger sample sizes. Therefore model outputs are instead based on data simulated for 250 taxa.
+While frequentist implementations of MR-PMM are available (e.g., ASReml), we advocate for a Bayesian approach due to 1) greater flexibility in fitting non-Gaussian response traits; 2) control gained through specification of prior distributions; 3) suitability for estimating variance components associated with structured random effects; 4) the ability to sample conditional multivariate distributions, avoiding intractable integration problems faced by frequentist techniques.
+
+Throughout this tutorial we explore a low dimensional example (tree with only 5 taxa) in order to show workings of the matrix operations. This is for the sake of exposition only; analyses of the form presented require much larger sample sizes (number of taxa) to reliably estimate model parameters. Therefore results and outputs are instead based on models fit to data simulated for 250 taxa.
 
 \
 
@@ -128,7 +130,8 @@ We begin with a simple example, in which $\mathbf{b}$ is length 1 and estimates 
 \end{eqnarray}\
 
 
-where $\mathbf{C}$ is a fixed $N_\mathrm{taxa} \times N_\mathrm{taxa}$ phylogenetic correlation matrix and $\sigma^2_\mathrm{phy}$, the phylogenetic variance, is a scalar to be estimated by the model. This model therefore takes as input a phylogeny (topology and branch lengths), which is assumed to be known without error. The $\mathbf{C}$ matrix is derived from the similarity matrix of the phylogeny, which gives the expected covariance in $\mathbf{y}$ among taxa assuming Brownian motion evolution [@symonds2014primer].
+where $\mathbf{C}$ is a fixed $N_\mathrm{taxa} \times N_\mathrm{taxa}$ phylogenetic correlation matrix and $\sigma^2_\mathrm{phy}$, the phylogenetic variance, is a scalar to be estimated by the model. This model therefore takes as input a phylogeny (topology and branch lengths), which is assumed to be known without error (though in a
+Bayesian setting, phylogenetic uncertainty can be incorporated by combining posterior samples across models fit to a set of candidate topologies). The $\mathbf{C}$ matrix is derived from the similarity matrix of the phylogeny, which gives the expected covariance in $\mathbf{y}$ among taxa assuming Brownian motion evolution [@symonds2014primer].
 
 \
 
@@ -228,7 +231,7 @@ Assuming a dataset with a single observation per taxon, the identity matrix $\ma
 
 ## Data Simulation
 
-Implementing these models in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data to make explicit what we are trying to model. To simulate data under this model, we simply construct our variable, $\mathbf{y}$, from the linear combination of predictors specified by the model, by supplying vectors of length $N_\mathrm{obs}$ for each of the quantities $\mathbf{b}$, $\mathbf{u}$, and $\mathbf{e}$. For Gaussian variables this can be done directly. For non-Gaussian variables simulation is a two-step process where $\mathbf{u}$ and $\mathbf{e}$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model (i.e., $\mathbf{b}$ = $\mathbf{b}_0$).
+Implementing such a model in R is fairly straight forward in both MCMCglmm and brms. But first, let's simulate some data to make explicit what we are trying to model. To simulate data under this model, we simply construct our variable, $\mathbf{y}$, from the linear combination of predictors specified by the model, by supplying vectors of length $N_\mathrm{obs}$ for each of the quantities $\mathbf{b}$, $\mathbf{u}$, and $\mathbf{e}$. For Gaussian variables this can be done directly. For non-Gaussian variables, simulation is a two-step process where $\mathbf{u}$ and $\mathbf{e}$ are simulated on the link scale to determine the mean and the response values themselves are subsequently drawn from the appropriate distribution (see section 3). In this example, we will simulate from an intercept only model (i.e., $\mathbf{b}$ = $\mathbf{b}_0$).
 
 
 ```{r eval=T}
@@ -342,7 +345,7 @@ b.1 <- brm(y ~ 1 + (1|gr(animal, cov = C)),
 
 ## Model Syntax
 
-In MCMCglmm, `animal` is a reserved term used to identify individuals/taxa in a quantitative genetic/phylogenetic analysis. The random effect specification `~animal` instructs MCMCglmm to fit a random effect at the individual/taxon level with covariance structure supplied via the `pedigree` argument. For `pedigree`, MCMCglmm accepts a `phylo` object directly and performs the necessary steps to derive the $\mathbf{C}$ matrix under the hood. The remaining arguments specify the data, the priors, and the sampler settings. The argument `pr` is used to retain the posterior distribution of random effects and `verbose=F` suppresses MCMC output to the console.
+In MCMCglmm, `animal` is a reserved term used to identify individuals/taxa in a quantitative genetic/phylogenetic analysis. The random effect specification `~animal` instructs MCMCglmm to fit a random effect at the individual/taxon level with covariance structure supplied via the `pedigree` argument. For `pedigree`, MCMCglmm accepts a `phylo` object directly and performs the necessary steps to derive the $\mathbf{C}$ matrix under the hood, while deriving computational gains from efficient use of the tree structure [@hadfield2010]. The remaining arguments specify the data, the priors, and the sampler settings. The argument `pr` is used to retain the posterior distribution of random effects and `verbose=F` suppresses MCMC output to the console.
 
 In brms, the phylogenetic random effect can be encoded in the style of lme4 `(1|gr(animal, cov = C))`, where `(1|x)` specifies random intercepts and `gr(animal, cov = C)` encodes the phylogenetic group structure. 
 
@@ -379,6 +382,8 @@ As `brms` fits multiple MCMC chains by default, potential scale reduction factor
 
 ## MCMCglmm Rhat
 # calculate Rhat for each variance component over multiple MCMC chains
+
+# fit multiple chains
 m.1.2 <- mclapply(1:4, function(i) {
   MCMCglmm(y ~ 1,
            random   = ~animal,
@@ -427,7 +432,7 @@ b.1 %>% pp_check(ndraws = 100)
 
 \
 
-For `MCMCglmm`, posterior predictive checks are also obtained fairly easily (see [@hadfield2010] and `MCMCglmm` course notes).
+For `MCMCglmm`, posterior predictive checks for this simple model can be obtained directly with the following.
 
 ```{r, eval = F}
 
@@ -449,7 +454,7 @@ pp_check(obs, pred, ppc_dens_overlay)
 
 ```
 
-\
+However, posterior predictive checks for MR models require additional care to properly account for trait covariances on different levels in the model hierarchy (See Model 2, also see [@hadfield2010] and `MCMCglmm` course notes).
 
 An even more rigorous approach to model validation of MR-PMM is leave-one-out (LOO) cross-validation (CV) (@roberts2017cross; also see Tutorial 2 covering an example MR-PMM analysis on leaf traits in Eucalyptus (https://benjamin-halliwell.github.io/MR-PMM/MR-PMM_euc_example_analysis.html), and Section 4 on Prediction in manuscript). Cross validation is the use of data splitting to estimate the predictive performance of one or more statistical models, usually for the purpose of model comparison and selection. However, predictive assessment tools such as cross validation are also useful to quantify or simply visualise how well a model can predict to new data (out of sample performance), e.g., to new taxon-trait pairs in a PMM. This is distinct from the assessment of model adequacy which concerns prediction of data to which a model was fit (within sample performance).
 
@@ -457,7 +462,7 @@ An even more rigorous approach to model validation of MR-PMM is leave-one-out (L
 
 ## Inference
 
-Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based on the estimated posterior distribution of the model parameters. For example, one-sided hypothesis tests can easily be performed by computing the proportion of samples satisfying a specified condition, e.g., $\theta < 0$. Inference can also be made by directly interpreting summary statistics of the marginal posterior distribution (e.g., the median and the 50% and 95% credible intervals). This is easily evaluated from the model summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify variances, we will transform estimates from brms by calculating quantiles from the square of MCMC samples.
+Having fit and validated our model, the next step is to make inferences on the parameters estimated. In the Bayesian paradigm, inference is based on the estimated posterior distribution of the model parameters. For example, one-sided hypothesis tests can easily be performed by computing the proportion of samples satisfying a specified condition (pMCMC), e.g., $\theta < 0$. Inference can also be made by directly interpreting summary statistics of the marginal posterior distribution (e.g., the median and the 50% and 95% credible intervals). This is easily evaluated from the model summary. However, we note that, while intercept estimates are directly comparable, MCMCglmm reports variance components where-as brms reports these quantities as standard deviations. As our simulations also specify variances, we will transform estimates from brms by calculating quantiles from the square of MCMC samples.
 
 ```{r, eval = F}
 # summary
@@ -789,6 +794,7 @@ b.2 <- brm(b.2.bf,
            chains = 4
            )
 
+
 ```
 
 \
@@ -797,7 +803,22 @@ b.2 <- brm(b.2.bf,
 
 In MCMCglmm, we use `cbind()` to specify multiple response variables. The reserved term `trait` is used to specify fixed effects for all response variables. In our example, `trait-1` suppresses the global intercept, instead fitting separate intercepts for each trait $\mathbf{y}_1$ and $\mathbf{y}_2$. With multiple response variables, it is now possible to model covariance between responses at different levels in the model hierarchy. MCMCglmm offers several options for defining the structure of covariance matrices to be estimated (@hadfield2010; also see MCMCglmm course notes). The argument `~us(trait)` specifies an unstructured (all elements estimated) covariance matrix with dimension equal to the number of response traits (here 2 x 2). The suffix `:animal` specifies this covariance matrix is on the level of the grouping factor `animal`, where-as `:units` encodes the residual covariance matrix.
 
-In brms, we use `mvbind()` to specify multiple response variables. An index (here `|u|`, but any unique identifier is accepted) is used within the random effect specification to instruct brms to estimate the correlation between $\mathbf{y}_1$ and $\mathbf{y}_2$ at the animal group level. If omitted, only the correlation between $\mathbf{y}_1$ and $\mathbf{y}_2$ on the residual level will be estimated.
+In brms, we use `mvbind()` to specify multiple response variables. An index (here `|u|`, but any unique identifier is accepted) is used within the random effect specification to instruct brms to estimate the correlation between $\mathbf{y}_1$ and $\mathbf{y}_2$ at the animal group level. Correlation between $\mathbf{y}_1$ and $\mathbf{y}_2$ on the residual level is specified by `set_rescor(TRUE)`. An even more flexible syntax for specifying MR models in `brms` is to define separate formulae for each response variable, allowing for distinct fixed and random predictors, as well as error distributions (See Model 3), for each response variable.
+
+```{r eval=FALSE}
+
+# equivalent to above
+b.2_y1 <- brmsformula(y1 ~ 1 + (1|u|gr(animal, cov = C))) + gaussian()
+b.2_y2 <- brmsformula(y2 ~ 1 + (1|u|gr(animal, cov = C))) + gaussian()
+b.2 <- brm(b.2_y1 + b.2_y2 + set_rescor(TRUE),
+           data   = d2,
+           family = gaussian(), 
+           data2  = list(C = C),
+           cores  = 4, 
+           chains = 4
+           )
+
+```
 
 \
 
@@ -1008,8 +1029,8 @@ In previous simulations, we saw that Gaussian responses can be drawn directly fr
 
 \begin{eqnarray}
 \begin{pmatrix}\mathbf{y_1} \\ \mathrm{logit}(\mathbf{p_2}) \end{pmatrix} &=& 
-\begin{pmatrix}\mathbf{b}_1 + \mathbf{u}_1 + \mathbf{e}_1 \\
-               \mathbf{b}_2 + \mathbf{u}_2 + \mathbf{e}_2 \\
+\begin{pmatrix}\mathbf{X}_1\mathbf{b}_1 + \mathbf{Z}_1\mathbf{u}_1 + \mathbf{e}_1 \\
+               \mathbf{X}_2\mathbf{b}_2 + \mathbf{Z}_2\mathbf{u}_2 + \mathbf{e}_2 
 \end{pmatrix}\\[2mm]
 \\
 
@@ -1066,9 +1087,9 @@ m.4 <- MCMCglmm(cbind(y1, y2) ~ trait-1,
                 )
 
 # brms
-bf_y1 <- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
-bf_y2 <- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
-b.4 <- brm(bf_y1 + bf_y2 + set_rescor(FALSE),
+b.4_y1 <- brmsformula(y1 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs), sigma = 0.1) + gaussian()
+b.4_y2 <- brmsformula(y2 ~ 1 + (1|b|gr(animal, cov = C)) + (1|e|obs)) + bernoulli()
+b.4 <- brm(b.4_y1 + b.4_y2 + set_rescor(FALSE),
           data   = d4, 
           family = gaussian(), 
           data2  = list(C = C),
@@ -1111,8 +1132,6 @@ b.4 %>% as_tibble() %>%
         pull(lambda_logit_y2) %>% quantile(probs=c(0.025,0.5,0.975))
 
 ```
-
-\
 
 N.B. Even when dealing exclusively with Gaussian traits, adjustments to the calculation of $\lambda$ are sometimes necessary. For example, including additional variance components from multilevel models in the denominator of the $\lambda$ calculation [@de2018fixed].
 
