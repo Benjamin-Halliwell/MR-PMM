@@ -2,7 +2,7 @@
 
 This repository pertains to the article "Multi-Response Phylogenetic Mixed Models: Concepts and Application" by Ben Halliwell, Barbara R. Holland, and Luke A. Yates.
 
-https://doi.org/10.1101/2022.12.13.520338
+https://onlinelibrary.wiley.com/doi/full/10.1111/brv.70001
 
 The first tutorial covers model specification, diagnostics, validation, inference and simulation for multi-response phylogenetic mixed models (MR-PMM) in R.
 
